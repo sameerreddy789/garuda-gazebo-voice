@@ -1,0 +1,42 @@
+# =============================================================================
+# GarudaOne DroneOS — Python Dependencies
+# Target: Raspberry Pi 5 (8GB), Ubuntu 24.04 LTS ARM64
+# =============================================================================
+
+# --- Core ---
+pyyaml>=6.0.1
+asyncio-mqtt>=0.16.2          # async utilities
+
+# --- Flight Controller (PX4 OFFBOARD via MAVLink) ---
+mavsdk>=2.1.0                 # PX4 official async Python SDK
+pymavlink>=2.4.41             # Low-level MAVLink fallback
+
+# --- Computer Vision ---
+opencv-python-headless>=4.9.0 # Frame capture + image processing
+numpy>=1.26.0                 # Array operations
+
+# --- AI Inference ---
+# ncnn-python>=1.0.0          # PicoDet-S inference (install from source on ARM)
+# ncps>=0.0.7                 # CfC Liquid Neural Network (pip install ncps)
+
+# --- Voice Pipeline ---
+# openwakeword>=0.6.0         # Wake word detection
+# faster-whisper>=1.0.0       # Speech-to-text (whisper.cpp Python wrapper)
+# piper-tts>=1.2.0            # Text-to-speech
+
+# --- Utilities ---
+scipy>=1.12.0                 # B-spline interpolation, spatial transforms
+pyserial>=3.5                 # UART serial communication
+
+# --- Development ---
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# =============================================================================
+# ARM-specific packages (uncomment on RPi5):
+# pip install ncnn             # Build from source: github.com/Tencent/ncnn
+# pip install ncps             # CfC Liquid Neural Networks
+# pip install openwakeword     # Wake word
+# pip install faster-whisper   # Whisper STT
+# pip install piper-tts        # Piper TTS
+# =============================================================================

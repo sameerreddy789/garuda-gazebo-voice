@@ -1,0 +1,144 @@
+# =============================================================================
+# GarudaOne DroneOS — Drone Hardware Configuration
+# Source: Betaflight 2025.12.5-alpha on MICO/MICOAIR743 (STM32H743)
+# =============================================================================
+
+drone:
+  name: "GarudaOne Prototype"
+  frame: "Flywoo FlyLens 85 Lite"
+  target_weight_g: 249
+  motor_count: 4
+
+# --- Flight Controller ---
+flight_controller:
+  board: "MicoAir H743 AIO 35A AM32"
+  mcu: "STM32H743"
+  firmware: "PX4"  # Target firmware (currently Betaflight, needs flash)
+  
+  # UART Connection to RPi5
+  serial:
+    port: "/dev/ttyAMA0"          # RPi5 GPIO UART
+    baud_rate: 921600              # Standard PX4 companion link
+    protocol: "mavlink_v2"
+
+  # Board alignment (from Betaflight config)
+  board_alignment:
+    roll_degrees: 180
+    pitch_degrees: 0
+    yaw_degrees: 135
+
+# --- PID Tuning Data (Betaflight Profile 1) ---
+# These values are for reference. PX4 uses different PID structure.
+# After PX4 flash, tune from scratch using QGroundControl.
+betaflight_pid_backup:
+  profile: 1
+  pid_gains:
+    roll:  { p: 45, i: 80, d: 30, d_max: 40, feedforward: 120 }
+    pitch: { p: 47, i: 84, d: 34, d_max: 46, feedforward: 125 }
+    yaw:   { p: 45, i: 80, d: 0,  d_max: 0,  feedforward: 120 }
+  
+  controller_settings:
+    feedforward_jitter_reduction: 7
+    feedforward_smoothness: 65
+    feedforward_averaging: "2_point"
+    feedforward_boost: 15
+    max_rate_limit: 90
+    i_term_relax: { axes: "RP", type: "setpoint", cutoff: 15 }
+    anti_gravity: { enabled: true, gain: 8.0 }
+    i_term_rotation: { dynamic_damping_gain: 37, advance: 20 }
+  
+  throttle_motor:
+    throttle_boost: 5
+    motor_output_limit: 100
+    dynamic_idle: false           # Dshot telemetry OFF
+    vbat_sag_compensation: false
+    thrust_linearization: false
+    tpa_mode: "D"
+    tpa_rate_percent: 65
+    tpa_breakpoint_us: 1350
+  
+  rates:
+    profile: 1
+    type: "betaflight"
+    roll:  { rc_rate: 0.60, rate: 0.60, expo: 0.30 }
+    pitch: { rc_rate: 0.60, rate: 0.60, expo: 0.30 }
+    yaw:   { rc_rate: 0.60, rate: 0.60, expo: 0.30 }
+    max_rate_dps: 300             # All axes: 300 deg/s
+    angle_mode_strength: 32
+    horizon_strength: 75
+    horizon_transition: 75
+    angle_limit: 45
+    throttle_limit: { type: "SCALE", percent: 55 }
+    throttle_mid: 0.50
+    hover_point: 0.50
+    throttle_expo: 0.00
+  
+  filters:
+    gyro_lowpass_1: { mode: "dynamic", min_hz: 250, max_hz: 500, type: "PT1" }
+    gyro_lowpass_2: { mode: "static", cutoff_hz: 500, type: "PT1" }
+    dterm_lowpass_1: { mode: "dynamic", min_hz: 75, max_hz: 150, expo: 5, type: "PT1" }
+    dterm_lowpass_2: { mode: "static", cutoff_hz: 150, type: "PT1" }
+    dynamic_notch: { enabled: true, count: 3, q_factor: 300, min_hz: 100, max_hz: 600 }
+    yaw_lowpass: { cutoff_hz: 100 }
+  
+  system:
+    gyro_frequency_khz: 3.20
+    pid_loop_frequency_khz: 3.20
+    active_imu: "BMI270"
+    accelerometer: false          # Disabled in Betaflight config
+
+  misc:
+    integrated_yaw: true
+    acro_trainer_angle_limit: 20
+    max_arm_angle: 180
+
+# --- Sensors ---
+sensors:
+  gps:
+    model: "Foxeer M10Q"
+    features: ["GPS", "Compass"]
+  
+  optical_flow:
+    model: "MicoAir MTF01 + MT"
+    interface: "I2C"
+    rangefinder: "MTF01"
+    flow_sensor: "MT"
+  
+  imu:
+    model: "BMI270"
+    gyro_rate_hz: 3200
+    accel_rate_hz: 3200
+
+# --- Motors ---
+motors:
+  model: "QPT 1404-4500KV"
+  count: 4
+  kv: 4500
+  props: "Gemfan Hurricane 2023 Tri-Blade"
+  prop_size_inch: 2.0
+  esc: "Integrated 35A AM32 (BLHeli_32)"
+  protocol: "DShot300"            # Inferred from Betaflight config
+
+# --- Camera ---
+camera:
+  model: "Skydroid C10 Pro"
+  stabilization: "3-axis gimbal"
+  protocol: "proprietary"         # Reverse-engineered feed
+  resolution: "1080p"             # Prototype (4K in production with IMX678)
+  fps: 30
+
+# --- Battery ---
+battery:
+  model: "LAVA 3S 450mAh LiPo"
+  cells: 3
+  capacity_mah: 450
+  voltage_nominal: 11.1
+  voltage_full: 12.6
+  voltage_warn: 10.5
+  voltage_critical: 9.9
+
+# --- Radio ---
+radio:
+  receiver: "Zerodrag Nexus ELRS 2.4GHz"
+  transmitter: "Radiomaster ELRS Pocket"
+  protocol: "CRSF"

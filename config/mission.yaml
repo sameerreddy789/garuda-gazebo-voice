@@ -1,0 +1,142 @@
+# =============================================================================
+# GarudaOne DroneOS — Default Mission Parameters
+# =============================================================================
+
+# --- General Flight ---
+flight:
+  default_takeoff_altitude_m: 3.0
+  max_altitude_m: 30.0
+  max_speed_ms: 10.0            # 10 m/s = 36 km/h
+  cruise_speed_ms: 5.0
+  rtl_altitude_m: 15.0
+  rtl_speed_ms: 3.0
+
+# --- Geofence ---
+geofence:
+  enabled: true
+  max_radius_m: 100.0           # Max horizontal distance from home
+  max_altitude_m: 30.0
+  action: "rtl"                 # Action on breach: rtl, land, hover
+
+# --- Subject Tracking ---
+tracking:
+  default_follow_distance_m: 5.0
+  min_follow_distance_m: 2.0
+  max_follow_distance_m: 20.0
+  default_altitude_m: 4.0
+  tracking_speed_ms: 5.0
+  
+  # Bounding box target zone (normalized frame coordinates)
+  # Center the subject in the frame
+  target_bbox_center_x: 0.5
+  target_bbox_center_y: 0.5
+  target_bbox_size: 0.25        # Subject should occupy ~25% of frame height
+  
+  # Tracking error thresholds
+  lost_subject_timeout_s: 3.0   # Time before declaring subject lost
+  reacquire_timeout_s: 10.0     # Time before giving up re-acquisition
+
+# --- Shot Modes ---
+shot_modes:
+  orbit:
+    default_radius_m: 8.0
+    default_speed_ms: 2.0
+    default_direction: "clockwise"
+    altitude_m: 5.0
+  
+  chase:
+    default_distance_m: 5.0
+    default_offset_angle_deg: 0  # 0 = directly behind
+    altitude_m: 3.0
+    speed_limit_ms: 8.0
+  
+  reveal:
+    default_speed_ms: 2.0
+    pull_back_distance_m: 15.0
+    rise_altitude_m: 10.0
+    direction: "backward_up"
+  
+  hover:
+    position_hold_tolerance_m: 0.5
+    altitude_hold_tolerance_m: 0.3
+
+# --- Safety ---
+safety:
+  battery_warn_percent: 30
+  battery_critical_percent: 15
+  battery_land_percent: 10
+  heartbeat_timeout_s: 3.0      # RTL if no heartbeat for 3s
+  max_tilt_angle_deg: 35.0
+  wind_limit_ms: 8.0            # Max wind for sub-250g drone
+  
+  # Emergency stop
+  emergency_motor_cutoff: true
+  emergency_land_on_comms_loss: true
+
+# --- Gimbal ---
+gimbal:
+  pitch_min_deg: -90            # Straight down
+  pitch_max_deg: 30             # Slightly above horizon
+  yaw_range_deg: 330            # Near-full rotation
+  default_pitch_deg: -15        # Slight downward angle
+  smoothing_factor: 0.85        # Low-pass filter for smooth movement
+  counter_rotate_enabled: true  # The "secret weapon" — counter-rotate during maneuvers
+
+# --- Control Loop ---
+control:
+  main_loop_hz: 50              # 50Hz main control loop
+  perception_hz: 30             # Match camera FPS
+  offboard_setpoint_hz: 10      # MAVSDK velocity setpoint rate
+  telemetry_hz: 5               # Telemetry logging rate
+  
+  # PID fallback controller (used before CfC LNN is trained)
+  pid_fallback:
+    # Position tracking PID
+    position:
+      kp: 0.8
+      ki: 0.05
+      kd: 0.3
+      integral_limit: 2.0
+    # Altitude PID
+    altitude:
+      kp: 1.0
+      ki: 0.1
+      kd: 0.5
+      integral_limit: 1.5
+    # Yaw PID (for subject centering)
+    yaw:
+      kp: 1.2
+      ki: 0.02
+      kd: 0.4
+      integral_limit: 1.0
+
+# --- Voice ---
+voice:
+  enabled: true
+  audio_sample_rate: 16000
+  command_max_duration_s: 4.0
+  response_volume: 0.7
+  wake_word: "garuda"
+  confirmation_phrases:
+    takeoff: "Taking off"
+    land: "Landing now"
+    orbit: "Starting orbit mode"
+    chase: "Following you"
+    reveal: "Starting reveal shot"
+    rtl: "Heading home"
+    stop: "Hovering in place"
+    recording_start: "Recording started"
+    recording_stop: "Recording stopped"
+    battery_low: "Battery low, heading home"
+    subject_lost: "I lost sight of you"
+    subject_found: "I see you again"
+
+# --- Logging ---
+logging:
+  level: "INFO"
+  file: "logs/garuda.log"
+  max_size_mb: 50
+  rotation_count: 5
+  log_telemetry: true
+  log_perception: false         # High frequency, disable unless debugging
+  session_recording: true       # Log full flight session for replay/training

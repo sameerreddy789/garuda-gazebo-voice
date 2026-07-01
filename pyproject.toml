@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "garudaone-droneos"
+version = "0.1.0"
+description = "GarudaOne DroneOS — Autonomous AI-powered cinematography drone companion computer software"
+readme = "README.md"
+license = {text = "Proprietary"}
+requires-python = ">=3.11"
+authors = [
+    {name = "GarudaOne Team"},
+]
+
+[project.scripts]
+garuda = "garuda.main:main"
+
+[tool.setuptools.packages.find]
+include = ["garuda*"]

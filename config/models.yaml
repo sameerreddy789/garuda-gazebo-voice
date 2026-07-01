@@ -1,0 +1,115 @@
+# =============================================================================
+# GarudaOne DroneOS — AI Model Configuration
+# Target: Raspberry Pi 5 (8GB RAM), CPU-only inference
+# =============================================================================
+
+models_dir: "models"
+
+# --- Layer 1: Cognitive Brain ---
+llm:
+  name: "LFM-2.5-230M"
+  description: "Liquid Foundation Model — agentic tool-calling brain"
+  engine: "llama_cpp"
+  model_file: "lfm-2.5-230m.Q4_K_M.gguf"
+  download_url: "https://huggingface.co/LiquidAI/LFM-2.5-230M-GGUF/resolve/main/lfm-2.5-230m.Q4_K_M.gguf"
+  expected_size_mb: 180
+  context_length: 32768
+  max_tokens: 512
+  temperature: 0.1
+  threads: 4                    # RPi5 has 4 cores
+  expected_speed_tps: 42        # Tokens per second on RPi5
+
+tool_router:
+  name: "Needle-26M"
+  description: "Ultra-fast tool routing for simple commands"
+  engine: "llama_cpp"
+  model_file: "needle-26m.Q4_0.gguf"
+  download_url: "https://huggingface.co/CactusCompute/Needle-26M-GGUF/resolve/main/needle-26m.Q4_0.gguf"
+  expected_size_mb: 14
+  max_tokens: 64
+  temperature: 0.0
+  threads: 2
+  expected_speed_tps: 1200
+
+# --- Layer 2: Perception ---
+detector:
+  name: "PicoDet-S"
+  description: "Mobile object detector optimized for ARM"
+  engine: "ncnn"
+  model_param: "picodet_s_320_coco.param"
+  model_bin: "picodet_s_320_coco.bin"
+  download_url: "https://paddledet.bj.bcebos.com/deploy/third_engine/picodet_s_320_coco_lcnet.tar"
+  expected_size_mb: 4
+  input_width: 320
+  input_height: 320
+  quantization: "INT8"
+  confidence_threshold: 0.5
+  nms_threshold: 0.45
+  target_classes: [0]           # 0 = person in COCO
+  expected_fps: 50              # 45-55 FPS on RPi5
+
+visual_odometry:
+  name: "SVO2"
+  description: "Semi-direct visual odometry for micro-aerial vehicles"
+  engine: "native_cpp"
+  build_from_source: true
+  source_url: "https://github.com/uzh-rpg/rpg_svo_pro_open"
+  camera_topic: "/garuda/camera/raw"
+  imu_topic: "/garuda/imu/data"
+
+# --- Voice Pipeline ---
+wake_word:
+  name: "openWakeWord"
+  description: "Always-on wake word detection"
+  model_file: "hey_garuda.onnx"
+  base_model_url: "https://github.com/dscripka/openWakeWord/releases/download/v0.6.0/melspectrogram.onnx"
+  expected_size_mb: 3
+  threshold: 0.5
+  wake_word: "garuda"
+  chunk_size: 1280              # 80ms at 16kHz
+
+stt:
+  name: "Whisper-Tiny"
+  description: "Speech-to-text (offline, edge-optimized)"
+  engine: "faster_whisper"
+  model_size: "tiny"
+  model_file: "whisper-tiny-int8"
+  download_id: "Systran/faster-whisper-tiny"
+  expected_size_mb: 39
+  compute_type: "int8"
+  language: "en"
+  beam_size: 1
+  vad_filter: true
+
+tts:
+  name: "Piper-TTS"
+  description: "Text-to-speech (natural drone voice)"
+  engine: "piper"
+  voice_model: "en_US-lessac-medium.onnx"
+  download_url: "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx"
+  voice_config: "en_US-lessac-medium.onnx.json"
+  config_url: "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json"
+  expected_size_mb: 20
+  sample_rate: 22050
+
+# --- Intent Classification (fallback) ---
+intent_model:
+  name: "MiniLM-L12-Multilingual"
+  description: "Semantic intent matching when keyword matching fails"
+  engine: "sentence_transformers"
+  model_id: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  expected_size_mb: 118
+  # Only downloaded if keyword matching is insufficient
+  optional: true
+
+# --- Control ---
+cfc_controller:
+  name: "CfC-LNN"
+  description: "Closed-form Continuous-time Liquid Neural Network"
+  library: "ncps"
+  neurons: 19
+  mode: "default"
+  # No pre-trained weights yet — trained via Imitation Learning
+  # Falls back to PID controller until training data is collected
+  pretrained: false
+  fallback: "pid"
