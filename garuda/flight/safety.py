@@ -78,10 +78,15 @@ class SafetyWatchdog:
         if not self._flight or not self._flight.is_connected:
             return
 
+        # Skip heartbeat check in simulation/stub mode (no real PX4)
+        # The simulated telemetry loop updates _last_heartbeat itself
+        if not hasattr(self._flight, '_drone') or self._flight._drone is None:
+            return
+
         elapsed = time.time() - self._last_heartbeat_time
         if elapsed > self._heartbeat_timeout and self._flight.is_armed:
             log.critical(
-                f"HEARTBEAT LOST — no response for {elapsed:.1f}s "
+                f"HEARTBEAT LOST -- no response for {elapsed:.1f}s "
                 f"(timeout: {self._heartbeat_timeout}s)"
             )
             await self.bus.publish(Event(

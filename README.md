@@ -70,9 +70,42 @@ make run
 ### Development (on any machine)
 ```bash
 pip install -r requirements.txt
-GARUDA_MODE=simulation make run   # No hardware needed
+GARUDA_MODE=simulation make run   # Runs completely offline using Telemetry Stub Fallback
 make test                          # Run tests
 ```
+
+## Simulation Development (PX4 SITL)
+
+For full flight dynamics testing, use PX4 SITL (Software-In-The-Loop) running
+inside WSL2 on Windows. This runs the **exact same PX4 firmware** as the real
+MicoAir H743 flight controller.
+
+### Quick Start (Windows + WSL2)
+```bash
+# 1. Setup PX4 SITL in WSL2 (one-time, ~30 minutes)
+wsl bash scripts/setup_sitl.sh
+
+# 2. Launch PX4 SITL + Gazebo (in a separate WSL2 terminal)
+wsl bash scripts/launch_sitl.sh
+
+# 3. Run DroneOS connected to the simulated drone
+make run-sitl
+```
+
+### What You Get
+- 🚁 **Real PX4 firmware** with actual flight physics
+- 🎥 **3D visualization** via Gazebo and QGroundControl
+- 🔄 **Same code** for simulation and real hardware (change one config line)
+- 🧠 **All AI modules** can run with real models or stubs
+
+See [`docs/sitl_setup_guide.md`](docs/sitl_setup_guide.md) for the complete guide.
+
+### Connection Modes
+| Mode | How to Enable | Behavior |
+|------|---------------|----------|
+| **SITL** | `GARUDA_MODE=simulation` + PX4 SITL running | Real PX4 flight dynamics |
+| **Stub** | `GARUDA_MODE=simulation` (no SITL running) | Fake telemetry for logic testing |
+| **Hardware** | (default, no env var) | UART connection to real flight controller |
 
 ## Voice Commands
 

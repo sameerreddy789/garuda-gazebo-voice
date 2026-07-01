@@ -5,6 +5,7 @@ Async-friendly structured logger with per-module tags,
 flight session recording, and performance timestamps.
 """
 
+import io
 import logging
 import os
 import sys
@@ -39,7 +40,17 @@ class GarudaLogger:
         self._root_logger.setLevel(logging.DEBUG)
 
         # Console handler — human readable
-        console = logging.StreamHandler(sys.stdout)
+        # Wrap stdout in UTF-8 to avoid UnicodeEncodeError on Windows cp1252
+        try:
+            utf8_stdout = io.TextIOWrapper(
+                sys.stdout.buffer, encoding="utf-8", errors="replace",
+                line_buffering=True,
+            )
+        except AttributeError:
+            # Fallback if stdout has no buffer (e.g., some IDE consoles)
+            utf8_stdout = sys.stdout
+
+        console = logging.StreamHandler(utf8_stdout)
         console.setLevel(logging.INFO)
         console_fmt = logging.Formatter(
             "[%(asctime)s.%(msecs)03d] [%(levelname)-5s] [%(name)s] %(message)s",

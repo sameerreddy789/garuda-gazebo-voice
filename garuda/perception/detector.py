@@ -57,15 +57,17 @@ class PicoDetector:
 
     def load_model(self) -> bool:
         """
-        Load the PicoDet-S model. Tries ncnn first, falls back to stub.
+        Load the PicoDet-S model. Tries ncnn first, then OpenCV DNN,
+        then falls back to stub detector.
 
-        Returns True if model loaded successfully.
+        Returns True if a backend loaded successfully.
         """
-        # Attempt 1: ncnn (preferred on ARM)
+        models_dir = self.config.models_dir
+
+        # Attempt 1: ncnn (preferred — fastest on ARM, also works on x86)
         try:
             import ncnn
 
-            models_dir = self.config.models_dir
             param_path = models_dir / self.config.get(
                 "detector.model_param", "picodet_s_320_coco.param"
             )
@@ -73,24 +75,59 @@ class PicoDetector:
                 "detector.model_bin", "picodet_s_320_coco.bin"
             )
 
-            self._net = ncnn.Net()
-            self._net.opt.use_vulkan_compute = False
-            self._net.opt.num_threads = 4
-            self._net.load_param(str(param_path))
-            self._net.load_model(str(bin_path))
+            if param_path.exists() and bin_path.exists():
+                self._net = ncnn.Net()
+                self._net.opt.use_vulkan_compute = False
+                self._net.opt.num_threads = 4
+                self._net.opt.lightmode = False
+                self._net.load_param(str(param_path))
+                self._net.load_model(str(bin_path))
 
-            self._loaded = True
-            self._backend = "ncnn"
-            log.info("✓ PicoDet-S loaded via ncnn")
-            return True
+                self._loaded = True
+                self._backend = "ncnn"
+                log.info(f"✓ PicoDet-S loaded via ncnn ({param_path.name})")
+                return True
+            else:
+                log.info(
+                    f"ncnn installed but model files not found: "
+                    f"{param_path.name}, {bin_path.name}"
+                )
+        except ImportError:
+            log.info("ncnn not installed (optional). Install: pip install ncnn")
+        except Exception as e:
+            log.warning(f"ncnn load failed ({e})")
 
-        except (ImportError, Exception) as e:
-            log.warning(f"ncnn not available ({e}) — using stub detector")
+        # Attempt 2: OpenCV DNN (works everywhere, including Windows)
+        try:
+            import cv2
 
-        # Attempt 2: Stub detector (for development without models)
+            # PicoDet also has ONNX exports
+            onnx_path = models_dir / self.config.get(
+                "detector.model_onnx", "picodet_s_320_coco.onnx"
+            )
+            if onnx_path.exists():
+                self._net = cv2.dnn.readNetFromONNX(str(onnx_path))
+                self._net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+                self._net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+
+                self._loaded = True
+                self._backend = "opencv"
+                log.info(f"✓ PicoDet-S loaded via OpenCV DNN ({onnx_path.name})")
+                return True
+            else:
+                log.info(
+                    f"OpenCV available but ONNX model not found: {onnx_path.name}"
+                )
+        except Exception as e:
+            log.warning(f"OpenCV DNN load failed ({e})")
+
+        # Attempt 3: Stub detector (for development without models)
         self._loaded = True
         self._backend = "stub"
-        log.info("Using STUB detector (no real inference)")
+        log.info(
+            "Using STUB detector (no real inference). "
+            "Download models: python scripts/download_models.py"
+        )
         return True
 
     def detect(self, frame: np.ndarray) -> list[BoundingBox]:
@@ -109,22 +146,29 @@ class PicoDetector:
         with profiler.measure("detector"):
             if self._backend == "ncnn":
                 return self._detect_ncnn(frame)
+            elif self._backend == "opencv":
+                return self._detect_opencv(frame)
             else:
                 return self._detect_stub(frame)
 
     def _detect_ncnn(self, frame: np.ndarray) -> list[BoundingBox]:
-        """Real ncnn inference path."""
+        """Real ncnn inference path for PicoDet-S.
+
+        PicoDet outputs multiple feature maps. This implementation handles
+        both single-output (simplified) and multi-output (stock PicoDet)
+        architectures by probing for the standard output names.
+        """
         import ncnn
 
         h, w = frame.shape[:2]
 
         # Preprocess: resize + normalize
         mat_in = ncnn.Mat.from_pixels_resize(
-            frame, ncnn.Mat.PixelType.PIXEL_BGR,
+            frame, ncnn.Mat.PixelType.PIXEL_BGR2,
             w, h, self._input_w, self._input_h
         )
 
-        # Normalize (PicoDet uses mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        # PicoDet normalization: ImageNet mean/std
         mean_vals = [0.485 * 255, 0.456 * 255, 0.406 * 255]
         norm_vals = [1.0 / (0.229 * 255), 1.0 / (0.224 * 255), 1.0 / (0.225 * 255)]
         mat_in.substract_mean_normalize(mean_vals, norm_vals)
@@ -132,25 +176,119 @@ class PicoDetector:
         # Run inference
         ex = self._net.create_extractor()
         ex.input("image", mat_in)
-        _, mat_out = ex.extract("output")
 
-        # Parse detections
+        # PicoDet may have multiple outputs (concatenated or per-scale).
+        # Try the standard output name first, then fall back to numbered outputs.
+        raw_detections = []
+        output_names = ["output", "outputs"]
+
+        # Try to extract from named outputs
+        found_output = False
+        for name in output_names:
+            try:
+                ret, mat_out = ex.extract(name)
+                if ret == 0:
+                    found_output = True
+                    # Parse rows: [class_id, confidence, x1, y1, x2, y2] per row
+                    for i in range(mat_out.h):
+                        values = mat_out.row(i)
+                        class_id = int(values[0])
+                        confidence = float(values[1])
+                        if confidence >= self._conf_threshold:
+                            raw_detections.append((
+                                class_id, confidence,
+                                float(values[2]), float(values[3]),
+                                float(values[4]), float(values[5]),
+                            ))
+            except Exception:
+                continue
+
+        # If named extraction failed, try numbered outputs (PicoDet: 0, 1, 2, 3)
+        if not found_output:
+            for idx in range(4):
+                try:
+                    ret, mat_out = ex.extract(idx)
+                    if ret == 0 and mat_out.h > 0:
+                        # Multi-output format varies; decode conservatively
+                        for i in range(mat_out.h):
+                            values = mat_out.row(i)
+                            # Heuristic: if row width >= 6, treat as detection
+                            if mat_out.w >= 6:
+                                class_id = int(values[0])
+                                confidence = float(values[1])
+                                if confidence >= self._conf_threshold:
+                                    raw_detections.append((
+                                        class_id, confidence,
+                                        float(values[2]), float(values[3]),
+                                        float(values[4]), float(values[5]),
+                                    ))
+                except Exception:
+                    continue
+
+        # Convert to normalized BoundingBox, filter by class
         detections = []
-        for i in range(mat_out.h):
-            values = mat_out.row(i)
-            class_id = int(values[0])
-            confidence = values[1]
+        for class_id, confidence, x1, y1, x2, y2 in raw_detections:
+            if class_id not in self._target_classes:
+                continue
 
+            # Clamp to image bounds and normalize
+            x1 = max(0.0, min(1.0, x1 / w))
+            y1 = max(0.0, min(1.0, y1 / h))
+            x2 = max(0.0, min(1.0, x2 / w))
+            y2 = max(0.0, min(1.0, y2 / h))
+
+            bbox = BoundingBox(
+                x_center=(x1 + x2) / 2,
+                y_center=(y1 + y2) / 2,
+                width=x2 - x1,
+                height=y2 - y1,
+                confidence=confidence,
+                class_id=class_id,
+            )
+            detections.append(bbox)
+
+        return detections
+
+    def _detect_opencv(self, frame: np.ndarray) -> list[BoundingBox]:
+        """OpenCV DNN inference path (fallback for Windows / non-ARM dev).
+
+        Uses the ONNX export of PicoDet-S. Slower than ncnn but works
+        everywhere without compilation.
+        """
+        import cv2
+
+        h, w = frame.shape[:2]
+
+        # Create input blob: resize to model input, normalize
+        blob = cv2.dnn.blobFromImage(
+            frame,
+            scalefactor=1.0 / (0.229 * 255.0),  # Combined scale (std)
+            size=(self._input_w, self._input_h),
+            mean=(0.485 * 255, 0.456 * 255, 0.406 * 255),  # ImageNet mean
+            swapRB=False,  # BGR input matches frame
+            crop=False,
+        )
+
+        self._net.setInput(blob)
+        output = self._net.forward()
+
+        # PicoDet ONNX output shape: (1, N, 6) → [class, conf, x1, y1, x2, y2]
+        detections = []
+        if output.ndim == 3:
+            output = output[0]  # Remove batch dim
+
+        for det in output:
+            class_id = int(det[0])
+            confidence = float(det[1])
             if confidence < self._conf_threshold:
                 continue
             if class_id not in self._target_classes:
                 continue
 
-            # Convert to normalized coordinates
-            x1 = values[2] / w
-            y1 = values[3] / h
-            x2 = values[4] / w
-            y2 = values[5] / h
+            x1 = max(0.0, min(1.0, float(det[2]) / w))
+            y1 = max(0.0, min(1.0, float(det[3]) / h))
+            x2 = max(0.0, min(1.0, float(det[4]) / w))
+            y2 = max(0.0, min(1.0, float(det[5]) / h))
 
             bbox = BoundingBox(
                 x_center=(x1 + x2) / 2,

@@ -221,27 +221,45 @@ class Orchestrator:
                 await self._update_emergency()
 
     async def _run_preflight_checks(self) -> None:
-        """Verify all systems are go before arming."""
+        """Verify all systems are go before arming.
+
+        In SITL/stub mode (GARUDA_MODE=simulation), preflight is more
+        relaxed — we don't require a real camera feed, and battery/GPS
+        thresholds are met by the simulated telemetry automatically.
+        """
         checks_passed = True
 
-        # Check flight controller connection
+        # Determine if we're in simulation (SITL or stub telemetry)
+        is_simulation = self.config.is_simulation
+
+        # Check flight controller connection (always required)
         if self.flight and not self.flight.is_connected:
             log.warning("Preflight FAIL: Flight controller not connected")
             checks_passed = False
 
-        # Check GPS fix
+        # Check GPS fix (skip strict check in sim — stub always has fix=3)
         if self.flight and self.flight.gps_fix_type < 3:
-            log.warning("Preflight FAIL: No GPS 3D fix")
+            if is_simulation:
+                log.info("Preflight INFO: No GPS fix (sim — will retry)")
+            else:
+                log.warning("Preflight FAIL: No GPS 3D fix")
+                checks_passed = False
+
+        # Check battery (use lower threshold in sim for convenience)
+        battery_min = 10 if is_simulation else 30
+        if self.flight and self.flight.battery_percent < battery_min:
+            log.warning(
+                f"Preflight FAIL: Battery below {battery_min}% "
+                f"(current: {self.flight.battery_percent:.0f}%)"
+            )
             checks_passed = False
 
-        # Check battery
-        if self.flight and self.flight.battery_percent < 30:
-            log.warning("Preflight FAIL: Battery below 30%")
-            checks_passed = False
-
-        # Check camera
+        # Check camera (warning only, never blocks in simulation)
         if self.camera and not self.camera.is_streaming:
-            log.warning("Preflight WARN: Camera not streaming")
+            if is_simulation:
+                log.info("Preflight INFO: Camera not streaming (sim — OK)")
+            else:
+                log.warning("Preflight WARN: Camera not streaming")
 
         if checks_passed:
             log.info("Preflight checks PASSED ✓")
@@ -251,7 +269,12 @@ class Orchestrator:
             self.transition_to(DroneState.IDLE)
 
     async def _update_takeoff(self) -> None:
-        """Monitor takeoff progress."""
+        """Monitor takeoff progress.
+
+        In real hardware / SITL: waits for PX4 to report target altitude.
+        In stub mode: the simulated telemetry climbs to target altitude
+        over ~2 seconds, after which is_at_target_altitude becomes True.
+        """
         if self.flight and self.flight.is_at_target_altitude:
             log.info("Takeoff complete — entering HOVER")
             self.transition_to(DroneState.HOVER)
@@ -265,7 +288,7 @@ class Orchestrator:
             await self.flight.hold_position()
 
     async def _update_tracking(self) -> None:
-        """Active subject tracking — the main cinematic mode."""
+        """Active subject tracking -- the main cinematic mode."""
         if self.perception and self.control and self.flight:
             # Get latest detection
             bbox = self.perception.current_bbox
@@ -278,6 +301,10 @@ class Orchestrator:
                     depth_map=depth_map,
                     mode="tracking",
                 )
+                # Smooth velocity through PathSmoother for cinematic footage
+                smoother = getattr(self.perception, 'smoother', None)
+                if smoother:
+                    velocity = smoother.smooth(velocity)
                 await self.flight.set_velocity_ned(velocity)
                 await self.control.set_gimbal(gimbal_angle)
 

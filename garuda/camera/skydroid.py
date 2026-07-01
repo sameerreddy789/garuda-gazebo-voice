@@ -38,6 +38,7 @@ class CameraFeed:
 
     Supports multiple sources:
       - "skydroid": Reverse-engineered Skydroid C10 Pro feed
+      - "gazebo": PX4 SITL Gazebo camera stream (sim-to-real testing)
       - "usb": Standard USB webcam via OpenCV
       - "file": Pre-recorded video file
       - "synthetic": Generated test frames
@@ -80,7 +81,8 @@ class CameraFeed:
         Start the camera feed.
 
         Args:
-            source: "skydroid", "usb", "file:/path/to/video.mp4",
+            source: "skydroid", "gazebo", "usb", "file:/path/to/video.mp4",
+                    "gazebo:5600" (UDP port for Gazebo stream),
                     "synthetic", or "auto" (try skydroid → usb → synthetic)
 
         Returns:
@@ -88,9 +90,15 @@ class CameraFeed:
         """
         if source == "auto":
             # Try sources in order of preference
-            for try_source in ["usb", "synthetic"]:
-                if self._try_start(try_source):
-                    return True
+            # In simulation mode, try gazebo first
+            if self.config.is_simulation:
+                for try_source in ["gazebo", "usb", "synthetic"]:
+                    if self._try_start(try_source):
+                        return True
+            else:
+                for try_source in ["usb", "synthetic"]:
+                    if self._try_start(try_source):
+                        return True
             return False
         else:
             return self._try_start(source)
@@ -100,6 +108,12 @@ class CameraFeed:
         try:
             if source == "skydroid":
                 return self._start_skydroid()
+            elif source.startswith("gazebo"):
+                # Parse optional port: "gazebo" or "gazebo:5600"
+                port = 5600  # Default Gazebo camera UDP port
+                if ":" in source:
+                    port = int(source.split(":")[1])
+                return self._start_gazebo(port)
             elif source == "usb":
                 return self._start_usb()
             elif source.startswith("file:"):
@@ -122,6 +136,71 @@ class CameraFeed:
         # The reverse-engineered driver provides frames via shared memory
         # or a custom socket interface
         log.warning("Skydroid driver not implemented — use USB or synthetic")
+        return False
+
+    def _start_gazebo(self, udp_port: int = 5600) -> bool:
+        """
+        Start PX4 SITL Gazebo camera stream.
+
+        When running PX4 SITL with Gazebo, the drone's virtual camera
+        can stream video over UDP using GStreamer. Configure the Gazebo
+        model's camera plugin to output to udp://<host>:<port>.
+
+        Common setup (in PX4 SITL):
+          - typhoon_h480 model has a downward + forward camera
+          - The video streams to UDP port 5600 by default
+          - QGroundControl also receives this stream
+
+        On the GarudaOne side, we receive the UDP stream as if it were
+        an RTP video source. OpenCV can read this with GStreamer backend.
+
+        Args:
+            udp_port: UDP port receiving the Gazebo camera stream
+        """
+        url = f"udpsrc port={udp_port} ! application/x-rtp,payload=26 ! " \
+              f"rtpjpegdepay ! jpegdec ! videoconvert ! appsink"
+
+        try:
+            # Try GStreamer backend (requires opencv with gstreamer support)
+            self._capture = cv2.VideoCapture(
+                url, cv2.CAP_GSTREAMER
+            )
+            if self._capture.isOpened():
+                self._is_streaming = True
+                self._source_type = "gazebo"
+                log.info(
+                    f"✓ Gazebo camera stream started "
+                    f"(UDP port {udp_port})"
+                )
+                return True
+            else:
+                self._capture.release()
+                self._capture = None
+        except Exception:
+            pass
+
+        # Fallback: try plain UDP URL (some OpenCV builds support this)
+        try:
+            self._capture = cv2.VideoCapture(f"udp://@0.0.0.0:{udp_port}")
+            if self._capture.isOpened():
+                self._is_streaming = True
+                self._source_type = "gazebo"
+                log.info(
+                    f"✓ Gazebo camera stream started (UDP fallback, "
+                    f"port {udp_port})"
+                )
+                return True
+            else:
+                self._capture.release()
+                self._capture = None
+        except Exception:
+            pass
+
+        log.info(
+            f"Gazebo camera stream not available on port {udp_port}. "
+            f"Ensure PX4 SITL + Gazebo is running with a camera model. "
+            f"Falling back to other sources."
+        )
         return False
 
     def _start_usb(self) -> bool:

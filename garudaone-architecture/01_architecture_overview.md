@@ -52,12 +52,12 @@ Skydroid Camera Feed (30fps, reverse-engineered)
     → SVO2: Sparse depth map + pose
     → Text summary: "Target center-left, obstacle 4m ahead-right"
 
-CfC LNN (19 neurons):
+FlightController (CfC LNN / PID):
     Input: BBox coords + depth costmap + tool params
     Output: velocity_ned(vx=2.1, vy=-0.3, vz=0) + gimbal_yaw(-12°)
-    → B-spline smoothing
+    → PathSmoother (B-spline smoothing for cinematic motion)
     → MAVSDK → PX4 OFFBOARD mode
-    → Gimbal command → Skydroid controller
+    → GimbalController → Skydroid hardware controller
 ```
 
 ---

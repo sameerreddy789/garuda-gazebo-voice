@@ -1397,6 +1397,31 @@ Tier 5 — Continuous Improvement (Post-flight)
   Loop: World-VLA-Loop → update world model → update VLA policy
   Frequency: Every 10 flights → one gradient update step
 ```
+---
+
+## PART 9 — RECENT IMPLEMENTATION FIXES & STABILITY PATCHES
+
+During recent testing, several core bugs were resolved across the system:
+
+### 1. Unicode Encoding Hardening
+The original logger, main boot banner, and profiler crashed on Windows (`cp1252` encoding) due to Unicode box-drawing characters and emojis (`✓`, `═`, `🛩️`).
+- **Fix:** Substituted with ASCII equivalents (`-`, `[OK]`, `===`).
+- **Fix:** Wrapped the logger `sys.stdout` handler in a UTF-8 `TextIOWrapper` with `errors='replace'` to guarantee stability across environments without crashing the main loop.
+
+### 2. Simulation Mode & Telemetry Stub (Hardware Constraint Fallback)
+The previous simulation configuration hung indefinitely if a PX4 SITL (Software In The Loop) simulator wasn't actively responding.
+- **Fix:** Updated the default SITL connection URL from the deprecated `udp://` to `udpin://:14540`.
+- **Fix:** Implemented a **10-second timeout** for the MAVSDK connection.
+- **Fix:** Added a **Simulated Telemetry Fallback** stub. If no PX4 instance is detected, the drone automatically boots into a pure software stub, feeding realistic fake GPS, battery drain, and attitude data to the `EventBus`. This bypasses hardware requirements (e.g., Isaac Sim requiring an RTX 4080) and allows high-level testing (State Machine, Brain, Perception) completely offline.
+- **Fix:** Patched `SafetyWatchdog` to ignore `HEARTBEAT_LOST` errors when running in stub telemetry mode, preventing log spam and false emergency RTL states.
+
+### 3. Inter-Layer Communication & Wiring
+Several key modules were instantiated but not properly wired together, resulting in broken features:
+- **Path Smoother:** `PathSmoother` (B-spline velocity smoothing) was instantiated in `main.py` but never passed down to the Orchestrator. Raw PID/CfC outputs were going straight to flight. 
+  - *Fix:* Passed `smoother` reference to the `PerceptionInterface`, allowing `Orchestrator._update_tracking` to smooth velocities before sending MAVLink setpoints, fixing jerky cinematic footage.
+- **Gimbal Controller:** The `set_gimbal()` method in `FlightController` was a no-op `pass`.
+  - *Fix:* Wired `GimbalController` directly into `FlightController` via `set_gimbal_controller()`. The drone now properly targets the subject using pitch/yaw gimbal corrections during tracking, orbit, and reveal modes.
+- **Windows Shutdown Support:** Replaced the unsupported `loop.add_signal_handler(signal.SIGTERM)` with standard `signal.signal(signal.SIGINT)` logic for clean cross-platform shutdown.
 
 ---
 

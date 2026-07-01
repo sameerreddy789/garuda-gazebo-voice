@@ -50,6 +50,14 @@ class Config:
         """Load all configuration files."""
         config_files = ["drone.yaml", "models.yaml", "mission.yaml"]
 
+        # Load simulation.yaml when in simulation mode (or always, for reference)
+        if self.is_simulation:
+            config_files.append("simulation.yaml")
+        else:
+            # Still load simulation.yaml so config.get() works for defaults
+            # but it won't override hardware-specific values
+            config_files.append("simulation.yaml")
+
         for filename in config_files:
             filepath = self._config_dir / filename
             if filepath.exists():

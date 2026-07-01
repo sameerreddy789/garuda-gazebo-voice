@@ -1,12 +1,25 @@
-.PHONY: run test download-models setup lint clean
+.PHONY: run run-sim run-sitl sitl sitl-setup test download-models setup lint clean
 
-# Run the DroneOS application
+# Run the DroneOS application (real hardware)
 run:
 	python -m garuda.main
 
-# Run with simulation mode (no hardware required)
+# Run with simulation mode (stub telemetry — no hardware or SITL required)
 run-sim:
 	GARUDA_MODE=simulation python -m garuda.main
+
+# Run connected to PX4 SITL (requires SITL running in WSL2)
+# Use this after starting SITL with: make sitl
+run-sitl:
+	GARUDA_MODE=simulation python -m garuda.main
+
+# Launch PX4 SITL + Gazebo inside WSL2 (run in separate terminal)
+sitl:
+	wsl bash scripts/launch_sitl.sh
+
+# Setup PX4 SITL environment in WSL2 (one-time installation)
+sitl-setup:
+	wsl bash scripts/setup_sitl.sh
 
 # Run all tests
 test:

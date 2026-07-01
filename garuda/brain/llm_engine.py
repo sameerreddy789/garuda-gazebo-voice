@@ -58,10 +58,15 @@ If you don't understand the command, respond: {"tool": "hover", "args": {}}
 
 class LLMEngine:
     """
-    LFM-2.5-230M language model interface via llama.cpp.
+    LFM-2.5-230M language model interface.
 
-    Runs the model as a subprocess using the llama-cli binary.
-    Keeps the process alive between commands to avoid reload overhead.
+    Backend priority:
+      1. llama-cpp-python (preferred — native Python bindings, fastest)
+      2. llama-cli subprocess (fallback — if only the binary is built)
+      3. Stub keyword matcher (development without model)
+
+    The model stays loaded in memory between commands for low latency.
+    Conversation history is maintained for multi-turn context.
     """
 
     def __init__(self, config: Config, event_bus: EventBus):
@@ -78,8 +83,9 @@ class LLMEngine:
         self._temperature = config.get("llm.temperature", 0.1)
         self._threads = config.get("llm.threads", 4)
 
-        # Process state
-        self._process: Optional[subprocess.Popen] = None
+        # Backend state
+        self._llm = None  # llama_cpp.Llama instance
+        self._backend = "none"  # "python", "subprocess", "stub"
         self._loaded = False
 
         # Conversation history (for context window)
@@ -89,20 +95,62 @@ class LLMEngine:
 
     def load_model(self) -> bool:
         """
-        Check if the model file exists. The actual llama.cpp process
-        is started on first inference to avoid unnecessary memory usage.
+        Load the LFM model. Tries llama-cpp-python first (preferred),
+        then checks for the llama-cli binary, then falls back to stub.
+
+        Returns True if any backend is available.
         """
-        if self._model_path.exists():
-            self._loaded = True
-            log.info(f"✓ LLM model found: {self._model_path.name}")
-            return True
-        else:
+        if not self._model_path.exists():
             log.warning(
                 f"LLM model not found at {self._model_path} — "
                 f"run 'python scripts/download_models.py' to download"
             )
-            self._loaded = False
-            return False
+            self._loaded = True
+            self._backend = "stub"
+            log.info("Using STUB LLM (keyword-based responses)")
+            return True
+
+        # Attempt 1: llama-cpp-python (native bindings)
+        try:
+            from llama_cpp import Llama
+
+            # Use a smaller context for actual inference to save memory
+            n_ctx = min(self._context_length, 4096)
+            self._llm = Llama(
+                model_path=str(self._model_path),
+                n_ctx=n_ctx,
+                n_threads=self._threads,
+                n_gpu_layers=0,  # CPU-only per architecture
+                verbose=False,
+            )
+            self._loaded = True
+            self._backend = "python"
+            log.info(
+                f"✓ LLM loaded via llama-cpp-python "
+                f"(ctx={n_ctx}, threads={self._threads})"
+            )
+            return True
+
+        except ImportError:
+            log.info(
+                "llama-cpp-python not installed. "
+                "Install: pip install llama-cpp-python"
+            )
+        except Exception as e:
+            log.warning(f"llama-cpp-python load failed: {e}")
+
+        # Attempt 2: llama-cli subprocess (fallback)
+        if self._find_llama_binary():
+            self._loaded = True
+            self._backend = "subprocess"
+            log.info("✓ LLM will use llama-cli subprocess")
+            return True
+
+        # Attempt 3: Stub
+        self._loaded = True
+        self._backend = "stub"
+        log.info("Using STUB LLM (keyword-based responses)")
+        return True
 
     async def process_command(self, text: str) -> Optional[dict]:
         """
@@ -170,13 +218,57 @@ class LLMEngine:
 
     async def _infer(self, prompt: str) -> Optional[str]:
         """
-        Run inference via llama.cpp subprocess.
+        Run inference using the active backend.
 
-        Uses llama-cli (the llama.cpp command-line tool) which
-        loads the GGUF model and runs inference on CPU.
+        Dispatches to:
+          - _infer_python()  for llama-cpp-python
+          - _infer_subprocess() for llama-cli binary
+          - _stub_response() for development without model
+        """
+        if self._backend == "python":
+            return await self._infer_python(prompt)
+        elif self._backend == "subprocess":
+            return await self._infer_subprocess(prompt)
+        else:
+            return self._stub_response(prompt)
+
+    async def _infer_python(self, prompt: str) -> Optional[str]:
+        """Run inference via llama-cpp-python (native bindings).
+
+        Runs in a thread executor to avoid blocking the asyncio loop
+        during CPU-bound inference.
         """
         try:
-            # Find llama-cli binary
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, self._infer_python_sync, prompt
+            )
+            return response
+        except Exception as e:
+            log.error(f"Python LLM inference failed: {e}")
+            return None
+
+    def _infer_python_sync(self, prompt: str) -> Optional[str]:
+        """Synchronous llama-cpp-python inference (called from executor)."""
+        try:
+            response = self._llm(
+                prompt,
+                max_tokens=self._max_tokens,
+                temperature=self._temperature,
+                stop=["<|user|>", "<|system|>"],
+                echo=False,
+            )
+            # Extract text from response
+            if "choices" in response and len(response["choices"]) > 0:
+                return response["choices"][0]["text"].strip()
+            return None
+        except Exception as e:
+            log.error(f"llama-cpp-python inference error: {e}")
+            return None
+
+    async def _infer_subprocess(self, prompt: str) -> Optional[str]:
+        """Run inference via llama-cli subprocess (fallback backend)."""
+        try:
             llama_bin = self._find_llama_binary()
             if not llama_bin:
                 log.warning("llama-cli binary not found — using stub response")

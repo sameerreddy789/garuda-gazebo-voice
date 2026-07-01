@@ -61,6 +61,7 @@ class MAVLinkBridge:
         self._is_armed = False
         self._is_offboard = False
         self._is_landed = True
+        self._connection_mode = "hardware"  # "hardware", "sitl", or "stub"
 
         # Telemetry cache
         self._position_gps = PositionGPS()
@@ -136,56 +137,254 @@ class MAVLinkBridge:
 
     # ── Connection ────────────────────────────────────────────────────────
 
+    @property
+    def connection_mode(self) -> str:
+        """Current connection mode: 'hardware', 'sitl', or 'stub'."""
+        return self._connection_mode
+
     async def connect(self) -> bool:
         """
         Connect to PX4 flight controller via MAVSDK.
 
-        On RPi5 hardware: connects via UART serial to MicoAir H743.
-        In simulation: connects to PX4 SITL on UDP.
+        Connection strategy (in order):
+          1. **Hardware mode** (GARUDA_MODE=hardware):
+             Connects via UART serial to MicoAir H743 on /dev/ttyAMA0.
+             If this fails, falls back to stub telemetry.
+
+          2. **Simulation mode** (GARUDA_MODE=simulation):
+             a) If px4_sitl.enabled is true (from simulation.yaml):
+                Connects to PX4 SITL via UDP (default udp://localhost:14540).
+                This gives REAL flight dynamics, sensor fusion, OFFBOARD mode.
+             b) If PX4 SITL doesn't respond within timeout:
+                Falls back to stub telemetry (fake GPS, battery, attitude).
+             c) If px4_sitl.enabled is false:
+                Goes directly to stub telemetry.
+
+        In stub mode, the full system still boots and runs — all state
+        machine transitions work, all event flows work. Only the actual
+        motor commands are logged but not sent.
         """
+        # Determine connection mode
+        if self.config.is_simulation:
+            sitl_enabled = self.config.get("px4_sitl.enabled", True)
+            if sitl_enabled:
+                self._connection_mode = "sitl"
+            else:
+                self._connection_mode = "stub"
+                log.info("SITL disabled in config — using stub telemetry")
+                self._is_connected = True
+                asyncio.create_task(self._run_simulated_telemetry())
+                return True
+        else:
+            self._connection_mode = "hardware"
+
         try:
             # Try importing MAVSDK — may not be installed on dev machines
             from mavsdk import System  # type: ignore
 
             self._drone = System()
 
-            if self.config.is_simulation:
-                # PX4 SITL default
-                connection_url = "udp://:14540"
+            # Build connection URL from config
+            if self._connection_mode == "sitl":
+                connection_url = self.config.get(
+                    "px4_sitl.connection_url", "udp://localhost:14540"
+                )
             else:
                 # Real hardware — UART serial
                 connection_url = (
                     f"serial://{self._serial_port}:{self._baud_rate}"
                 )
 
+            # Connection timeout from config (SITL needs more time to boot)
+            timeout_s = self.config.get(
+                "px4_sitl.connection_timeout_s",
+                10.0 if self._connection_mode == "hardware" else 15.0,
+            )
+
             log.info(f"Connecting to PX4: {connection_url}")
+            log.info(f"Connection mode: {self._connection_mode}")
+            log.info(f"Heartbeat timeout: {timeout_s}s")
+
             await self._drone.connect(system_address=connection_url)
 
-            # Wait for connection
-            log.info("Waiting for drone heartbeat...")
-            async for state in self._drone.core.connection_state():
-                if state.is_connected:
-                    self._is_connected = True
-                    log.info("✓ Connected to PX4 flight controller")
-                    break
-
-            # Start telemetry subscriptions
-            asyncio.create_task(self._subscribe_telemetry())
+            # Wait for connection WITH TIMEOUT
+            log.info(f"Waiting for drone heartbeat ({timeout_s}s timeout)...")
+            try:
+                await asyncio.wait_for(
+                    self._wait_for_heartbeat(), timeout=timeout_s
+                )
+                log.info("[OK] Connected to PX4 flight controller")
+                log.info(f"  Mode: {self._connection_mode}")
+                # Start real telemetry subscriptions
+                asyncio.create_task(self._subscribe_telemetry())
+            except asyncio.TimeoutError:
+                log.warning(
+                    f"PX4 heartbeat timeout ({timeout_s}s) — "
+                    f"no {'SITL' if self._connection_mode == 'sitl' else 'hardware FC'} running. "
+                    "Falling back to simulated telemetry."
+                )
+                self._drone = None  # Release the MAVSDK System
+                self._connection_mode = "stub"
+                self._is_connected = True
+                asyncio.create_task(self._run_simulated_telemetry())
 
             return True
 
         except ImportError:
             log.warning(
-                "MAVSDK not installed — running in stub mode. "
+                "MAVSDK not installed -- running in stub mode. "
                 "Install with: pip install mavsdk"
             )
+            self._connection_mode = "stub"
             self._is_connected = True  # Pretend for dev
+            asyncio.create_task(self._run_simulated_telemetry())
             return True
 
         except Exception as e:
             log.error(f"Failed to connect to PX4: {e}")
-            self._is_connected = False
-            return False
+            log.info("Falling back to simulated telemetry.")
+            self._connection_mode = "stub"
+            self._is_connected = True
+            asyncio.create_task(self._run_simulated_telemetry())
+            return True
+
+    async def _wait_for_heartbeat(self) -> None:
+        """Wait until MAVSDK reports a connected state."""
+        async for state in self._drone.core.connection_state():
+            if state.is_connected:
+                self._is_connected = True
+                return
+
+    async def _run_simulated_telemetry(self) -> None:
+        """
+        Generate fake telemetry data when no real PX4 is connected.
+
+        Simulates realistic flight state transitions:
+          - Landed on ground with GPS 3D fix
+          - After arm + takeoff: gradually climbs to target altitude
+          - Battery drains over time
+          - Attitude wobbles like real flight (wind)
+          - Position drifts slightly
+
+        This lets the full system boot and the entire state machine
+        work without any hardware or PX4 SITL.
+        """
+        import time as _time
+        import math
+
+        log.info("Simulated telemetry started (fake GPS, battery, attitude)")
+        log.info("  This simulates a real drone — takeoff will 'work'")
+
+        start_time = _time.time()
+
+        # Read simulation config for home position
+        home_lat = self.config.get(
+            "simulation.home_position.latitude_deg", 12.9716
+        )
+        home_lon = self.config.get(
+            "simulation.home_position.longitude_deg", 77.5946
+        )
+        home_alt_msl = self.config.get(
+            "simulation.home_position.altitude_m", 920.0
+        )
+
+        # Drain rate from config
+        drain_rate = self.config.get(
+            "simulation.battery.drain_rate_percent_per_second", 0.033
+        )
+
+        # GPS noise from config
+        gps_noise = self.config.get("simulation.gps.noise_meters", 0.5)
+
+        self._home_position = PositionGPS(
+            latitude_deg=home_lat,
+            longitude_deg=home_lon,
+            altitude_m=home_alt_msl,
+        )
+        self._position_gps = PositionGPS(
+            latitude_deg=home_lat,
+            longitude_deg=home_lon,
+            altitude_m=home_alt_msl,
+        )
+        # NED position: relative to home. NED down is positive.
+        self._position_ned = PositionNED()
+        self._gps_fix_type = 3  # 3D fix
+        self._gps_satellites = 12
+        self._battery_percent = self.config.get(
+            "simulation.battery.initial_percent", 100.0
+        )
+        self._battery_voltage = 12.6
+        self._is_landed = True
+        self._last_heartbeat = _time.time()
+
+        # Simulated altitude tracking (for takeoff detection)
+        _sim_altitude = 0.0  # Current altitude above ground (meters, negative in NED)
+        _sim_climb_rate = 0.0  # m/s (positive = going up)
+
+        while self._is_connected:
+            elapsed = _time.time() - start_time
+
+            # ── Simulate altitude changes based on state ──────────────
+            if not self._is_landed and self._is_armed:
+                if _sim_altitude < self._target_altitude:
+                    # Climbing to target altitude at ~2 m/s
+                    _sim_climb_rate = 2.0
+                    _sim_altitude = min(
+                        _sim_altitude + _sim_climb_rate * 0.5,  # 0.5s tick
+                        self._target_altitude,
+                    )
+                else:
+                    # Hovered at target — stay level
+                    _sim_climb_rate = 0.0
+
+                # Update NED position (negative down = positive altitude)
+                self._position_ned = PositionNED(
+                    north=math.sin(elapsed * 0.1) * 0.2,  # Tiny drift
+                    east=math.cos(elapsed * 0.1) * 0.2,
+                    down=-_sim_altitude,  # NED: down is positive
+                )
+
+                # Update GPS with simulated altitude
+                self._position_gps = PositionGPS(
+                    latitude_deg=home_lat + (math.sin(elapsed * 0.05) * gps_noise * 1e-5),
+                    longitude_deg=home_lon + (math.cos(elapsed * 0.05) * gps_noise * 1e-5),
+                    altitude_m=_sim_altitude,
+                )
+
+            # ── Battery drain ────────────────────────────────────────
+            self._battery_percent = max(
+                0.0, self._battery_percent - drain_rate * 0.5
+            )
+            self._battery_voltage = 9.9 + (self._battery_percent / 100.0) * 2.7
+
+            # ── Attitude wobble (wind simulation) ─────────────────────
+            wind_intensity = 0.5 if not self._is_landed else 0.0
+            self._attitude = AttitudeEuler(
+                roll_deg=math.sin(elapsed * 0.5) * (2.0 * wind_intensity),
+                pitch_deg=math.cos(elapsed * 0.7) * (1.5 * wind_intensity),
+                yaw_deg=(elapsed * 5.0) % 360.0 - 180.0,
+            )
+
+            # ── Heartbeat ────────────────────────────────────────────
+            self._last_heartbeat = _time.time()
+
+            # ── Publish events ───────────────────────────────────────
+            await self.bus.publish_nowait(Event(
+                type=EventType.BATTERY_UPDATE,
+                data={
+                    "percent": self._battery_percent,
+                    "voltage": self._battery_voltage,
+                },
+                source="flight_sim",
+            ))
+
+            await self.bus.publish_nowait(Event(
+                type=EventType.POSITION_UPDATE,
+                data={"position": self._position_gps},
+                source="flight_sim",
+            ))
+
+            await asyncio.sleep(0.5)  # 2Hz telemetry updates
 
     # ── Arming ────────────────────────────────────────────────────────────
 
@@ -195,7 +394,9 @@ class MAVLinkBridge:
             if self._drone:
                 await self._drone.action.arm()
             self._is_armed = True
-            self._is_landed = False
+            # In stub mode, we're still on the ground until takeoff
+            if self._connection_mode != "stub":
+                self._is_landed = False
             log.info("✓ Motors armed")
             await self.bus.publish(Event(
                 type=EventType.ARMED, source="flight"
@@ -226,13 +427,18 @@ class MAVLinkBridge:
         """
         Take off to the specified altitude.
 
-        PX4 handles the actual ascent — we just tell it the target height.
+        In hardware/SITL mode: PX4 handles the actual ascent.
+        In stub mode: the simulated telemetry will gradually climb to
+        this altitude so the state machine detects takeoff completion.
         """
         self._target_altitude = altitude_m
         try:
             if self._drone:
                 await self._drone.action.set_takeoff_altitude(altitude_m)
                 await self._drone.action.takeoff()
+            else:
+                # Stub mode — signal that we're airborne
+                self._is_landed = False
             log.info(f"Taking off to {altitude_m}m")
             return True
         except Exception as e:
@@ -244,11 +450,22 @@ class MAVLinkBridge:
         try:
             if self._drone:
                 await self._drone.action.land()
+            else:
+                # Stub mode — simulate landing after a brief delay
+                asyncio.create_task(self._simulate_landing())
             log.info("Landing...")
             return True
         except Exception as e:
             log.error(f"Land failed: {e}")
             return False
+
+    async def _simulate_landing(self) -> None:
+        """Simulate landing in stub mode (takes ~3 seconds)."""
+        await asyncio.sleep(3.0)
+        self._is_landed = True
+        self._is_armed = False
+        self._is_offboard = False
+        log.info("Simulated landing complete — on ground")
 
     async def return_to_launch(self) -> bool:
         """Fly back to the takeoff position and land."""

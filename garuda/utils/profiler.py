@@ -88,9 +88,9 @@ class Profiler:
 
     def report(self) -> str:
         """Generate a human-readable performance report."""
-        lines = ["── GarudaOne Performance Report ──"]
+        lines = ["-- GarudaOne Performance Report --"]
         lines.append(f"{'Module':<20} {'Avg (ms)':<12} {'Max (ms)':<12} {'FPS':<10}")
-        lines.append("─" * 54)
+        lines.append("-" * 54)
 
         for name, stats in sorted(self._modules.items()):
             lines.append(

@@ -52,8 +52,8 @@ BANNER = r"""
  | |_| | (_| | |  | |_| | (_| | (_| | |_| | | | |  __/
   \____|\__,_|_|   \__,_|\__,_|\__,_|\___/|_| |_|\___|
 
-  DroneOS v{version} — Autonomous AI Cinematography
-  ─────────────────────────────────────────────────────
+  DroneOS v{version} -- Autonomous AI Cinematography
+  -----------------------------------------------------
 """
 
 
@@ -67,20 +67,20 @@ async def boot() -> None:
     log.info(f"Mode: {os.environ.get('GARUDA_MODE', 'hardware')}")
 
     # ── Step 1: Configuration ─────────────────────────────────────────
-    log.info("═══ Step 1/7: Loading configuration ═══")
+    log.info("=== Step 1/7: Loading configuration ===")
     config = Config()
 
     # ── Step 2: Event Bus ─────────────────────────────────────────────
-    log.info("═══ Step 2/7: Initializing event bus ═══")
+    log.info("=== Step 2/7: Initializing event bus ===")
     bus = EventBus()
 
     # ── Step 3: Camera ────────────────────────────────────────────────
-    log.info("═══ Step 3/7: Starting camera feed ═══")
+    log.info("=== Step 3/7: Starting camera feed ===")
     camera = CameraFeed(config)
     camera.start(source="auto")
 
     # ── Step 4: AI Models ─────────────────────────────────────────────
-    log.info("═══ Step 4/7: Loading AI models ═══")
+    log.info("=== Step 4/7: Loading AI models ===")
 
     # Perception
     detector = PicoDetector(config)
@@ -96,6 +96,7 @@ async def boot() -> None:
     smoother = PathSmoother()
     gimbal = GimbalController(config)
     gimbal.connect()
+    controller.set_gimbal_controller(gimbal)  # Wire gimbal into controller
 
     # Brain
     llm_engine = LLMEngine(config, bus)
@@ -110,7 +111,7 @@ async def boot() -> None:
     voice.initialize()
 
     # ── Step 5: Flight Controller ─────────────────────────────────────
-    log.info("═══ Step 5/7: Connecting to PX4 ═══")
+    log.info("=== Step 5/7: Connecting to PX4 ===")
     flight = MAVLinkBridge(config, bus)
     await flight.connect()
 
@@ -118,7 +119,7 @@ async def boot() -> None:
     safety = SafetyWatchdog(config, bus)
 
     # ── Step 6: Orchestrator ──────────────────────────────────────────
-    log.info("═══ Step 6/7: Initializing orchestrator ═══")
+    log.info("=== Step 6/7: Initializing orchestrator ===")
     orchestrator = Orchestrator(config, bus)
 
     # Create a lightweight module interface for the orchestrator
@@ -158,8 +159,8 @@ async def boot() -> None:
     )
 
     # ── Step 7: Start ─────────────────────────────────────────────────
-    log.info("═══ Step 7/7: Starting main loop ═══")
-    log.info("All systems GO ✓")
+    log.info("=== Step 7/7: Starting main loop ===")
+    log.info("All systems GO [OK]")
 
     # Create async tasks for all concurrent modules
     tasks = [
@@ -173,20 +174,19 @@ async def boot() -> None:
         ),
     ]
 
-    # Handle shutdown signals
+    # Handle shutdown signals (compatible with Windows)
     shutdown_event = asyncio.Event()
 
-    def signal_handler():
+    def signal_handler(*args):
         log.info("Shutdown signal received")
         shutdown_event.set()
 
-    loop = asyncio.get_event_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, signal_handler)
-        except NotImplementedError:
-            # Windows doesn't support add_signal_handler
-            pass
+    # Use signal.signal which works on all platforms including Windows
+    signal.signal(signal.SIGINT, signal_handler)
+    try:
+        signal.signal(signal.SIGTERM, signal_handler)
+    except (OSError, AttributeError):
+        pass  # SIGTERM not available on Windows
 
     # Wait for shutdown
     try:
@@ -195,7 +195,7 @@ async def boot() -> None:
         log.info("Keyboard interrupt received")
 
     # ── Shutdown ──────────────────────────────────────────────────────
-    log.info("═══ Shutting down ═══")
+    log.info("=== Shutting down ===")
     await orchestrator.stop()
     await safety.stop()
     await voice.stop()
@@ -211,7 +211,7 @@ async def boot() -> None:
 
     # Final performance report
     profiler.report()
-    log.info("GarudaOne DroneOS shutdown complete. Fly safe! 🛩️")
+    log.info("GarudaOne DroneOS shutdown complete. Fly safe!")
 
 
 async def _perception_loop(
@@ -223,8 +223,10 @@ async def _perception_loop(
     smoother: PathSmoother,
 ) -> None:
     """
-    Perception loop — runs at camera FPS (~30Hz).
+    Perception loop -- runs at camera FPS (~30Hz).
     Reads frames, detects subjects, tracks them, and estimates depth.
+    Velocity commands are smoothed through PathSmoother before being
+    made available to the flight controller.
     """
     log.info("Perception loop started")
 
@@ -246,6 +248,9 @@ async def _perception_loop(
             # Visual odometry (pose + depth)
             pose, depth = visual_odom.process_frame(frame)
             perception_iface.current_depth = depth
+
+            # Store smoother reference so orchestrator can use it
+            perception_iface.smoother = smoother
 
             # Yield to event loop
             await asyncio.sleep(0.001)

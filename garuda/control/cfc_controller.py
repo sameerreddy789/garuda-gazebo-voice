@@ -90,8 +90,9 @@ class FlightController:
     Falls back to PID when CfC LNN is not trained.
     """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, gimbal=None):
         self.config = config
+        self._gimbal = gimbal  # GimbalController reference (can be set later)
 
         # PID controllers (fallback until CfC is trained)
         pid_config = config.get("control.pid_fallback", {})
@@ -388,6 +389,16 @@ class FlightController:
         return self._reveal_complete
 
     async def set_gimbal(self, yaw_correction_deg: float) -> None:
-        """Send gimbal angle command (via gimbal.py in production)."""
-        # TODO: Send to Skydroid gimbal controller
-        pass
+        """Send gimbal angle command via the GimbalController."""
+        if self._gimbal is not None:
+            self._gimbal.look_at_subject(
+                yaw_error_deg=yaw_correction_deg,
+                pitch_error_deg=0.0,
+            )
+            self._gimbal.update()
+        # If no gimbal is connected, this is silently skipped
+
+    def set_gimbal_controller(self, gimbal) -> None:
+        """Set the gimbal controller reference (can be called after init)."""
+        self._gimbal = gimbal
+        log.info("Gimbal controller linked to flight controller")

@@ -1,0 +1,123 @@
+# =============================================================================
+# GarudaOne DroneOS — Simulation Configuration
+# Used when GARUDA_MODE=simulation (no real hardware)
+# =============================================================================
+#
+# This file controls both PX4 SITL (real flight simulator) and the
+# telemetry stub fallback (fake data when no SITL is running).
+#
+# Usage:
+#   GARUDA_MODE=simulation python -m garuda.main
+#
+# If PX4 SITL is running on the network, the MAVLink bridge will connect
+# to it automatically and use REAL flight dynamics.
+# If no SITL is found (timeout), it falls back to fake telemetry stub.
+#
+# =============================================================================
+
+simulation:
+  # Simulated home position (Bangalore, India — GarudaOne HQ)
+  home_position:
+    latitude_deg: 12.9716
+    longitude_deg: 77.5946
+    altitude_m: 920.0  # Bangalore elevation
+
+  # Battery simulation
+  battery:
+    initial_percent: 100.0
+    drain_rate_percent_per_second: 0.033  # ~50 min flight time
+    voltage_full: 12.6
+    voltage_empty: 9.9
+
+  # Telemetry update rates
+  telemetry:
+    position_update_hz: 2
+    attitude_update_hz: 10
+    battery_update_hz: 1
+
+  # GPS simulation
+  gps:
+    fix_type: 3              # 3D fix
+    satellites: 12
+    noise_meters: 0.5        # Simulated GPS noise
+
+  # Isaac Sim integration (future — requires NVIDIA GPU)
+  isaac_sim:
+    enabled: false           # Set to true if Isaac Sim is installed
+    connection_url: "localhost:50051"
+    scene: "warehouse"       # Default scene to load
+    gpu_device: 0            # GPU device index
+
+# =============================================================================
+# PX4 SITL Connection
+# =============================================================================
+# When px4_sitl.enabled is true AND a PX4 SITL instance is running on the
+# specified URL, the MAVLink bridge will connect to real PX4 with actual
+# flight dynamics, sensor fusion, and OFFBOARD mode support.
+#
+# When px4_sitl.enabled is false OR connection times out, the system falls
+# back to the telemetry stub (fake GPS, battery, attitude) above.
+#
+# PX4 SITL runs inside WSL2 Ubuntu. The MAVSDK connection from Windows
+# uses UDP — WSL2 automatically forwards ports to the Windows host.
+# =============================================================================
+
+px4_sitl:
+  enabled: true              # true = try to connect to real PX4 SITL
+                              # false = always use telemetry stub
+
+  # MAVSDK connection URL
+  # Format: udp://<host>:<port>
+  #   udp://localhost:14540  — PX4 SITL running on this machine (WSL2)
+  #   udp://192.168.1.100:14540 — PX4 SITL on another machine
+  connection_url: "udp://localhost:14540"
+
+  # How long to wait for PX4 heartbeat before falling back to stub
+  connection_timeout_s: 15    # SITL may take a few seconds to boot
+
+  # Gazebo model (must match what PX4 SITL was launched with)
+  gazebo_model: "x500"        # x500, typhoon_h480, iris, standard_vtol
+
+  # MAVLink ports (informational — set by PX4, don't change here)
+  ports:
+    mavsdk: 14540             # MAVSDK-Python connects here
+    qgroundcontrol: 14550    # QGroundControl connects here
+    mavlink_router: 14560     # Optional: MAVLink router
+
+  # Home position override for PX4 SITL
+  # (Matches simulation.home_position above, but PX4 reads these from env vars)
+  home_position:
+    latitude_deg: 12.9716
+    longitude_deg: 77.5946
+    altitude_m: 920.0
+
+# =============================================================================
+# Domain Randomization (for closing sim-to-real gap)
+# =============================================================================
+# Applied when PX4 SITL is connected. These parameters add noise and
+# variation to the simulated environment so the AI models learn to be
+# robust against real-world conditions.
+# =============================================================================
+
+domain_randomization:
+  enabled: false              # Enable after baseline SITL works
+
+  # Wind simulation
+  wind:
+    enabled: false
+    max_speed_ms: 5.0         # Maximum wind gust speed
+    turbulence_intensity: 0.3  # 0.0 = calm, 1.0 = severe turbulence
+    direction_change_rate_hz: 0.1  # How often wind direction shifts
+
+  # Sensor noise injection
+  sensor_noise:
+    imu_noise: 0.01          # Accelerometer/gyro noise factor
+    gps_noise_m: 0.5         # GPS position noise in meters
+    baro_noise_m: 0.3        # Barometer altitude noise in meters
+    magnetometer_noise_uT: 0.1  # Magnetometer noise
+
+  # Camera simulation
+  camera:
+    motion_blur: false       # Enable motion blur on simulated camera
+    iso_noise: false         # Add ISO grain to frames
+    lens_flare: false         # Enable lens flare effects
