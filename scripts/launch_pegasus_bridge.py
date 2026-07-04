@@ -11,8 +11,6 @@ Prerequisites:
   - Pegasus Simulator Extension enabled
 """
 
-import asyncio
-import argparse
 
 # Isaac Sim / Omniverse core imports
 from omni.isaac.core import World
@@ -52,7 +50,7 @@ def main():
     ]
 
     # Spawn drone at coordinate 0,0,1
-    drone = Multirotor(
+    Multirotor(
         "/World/quadcopter",
         ROBOTS["Iris"],  # We use Iris as the base template in simulation
         0,
