@@ -43,7 +43,7 @@ simulation:
 
   # Isaac Sim integration (future — requires NVIDIA GPU)
   isaac_sim:
-    enabled: false           # Set to true if Isaac Sim is installed
+    enabled: true            # Isaac Sim integration enabled
     connection_url: "localhost:50051"
     scene: "warehouse"       # Default scene to load
     gpu_device: 0            # GPU device index
