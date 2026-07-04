@@ -50,7 +50,7 @@ def main():
     ]
 
     # Spawn drone at coordinate 0,0,1
-    Multirotor(
+    _drone = Multirotor(
         "/World/quadcopter",
         ROBOTS["Iris"],  # We use Iris as the base template in simulation
         0,
