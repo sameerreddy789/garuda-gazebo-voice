@@ -17,7 +17,7 @@ import time
 from typing import Optional
 
 import numpy as np
-import sky_tracker
+import cv2
 
 from garuda.core.config import Config
 from garuda.core.events import Event, EventBus, EventType
@@ -37,14 +37,8 @@ class SubjectTracker:
         self.config = config
         self.bus = event_bus
 
-        # Initialize Sky Tracker (C++ CPU Tracker)
-        profile = config.get("tracking.profile", "pi4-target")
-        try:
-            self._sky_tracker = sky_tracker.Tracker(profile)
-            log.info(f"Initialized sky_tracker with profile '{profile}'")
-        except Exception as e:
-            log.error(f"Failed to initialize sky_tracker: {e}")
-            self._sky_tracker = None
+        # Tracker instance (created upon locking)
+        self._tracker = None
 
         # Tracking state
         self._current_bbox: Optional[BoundingBox] = None
@@ -75,11 +69,8 @@ class SubjectTracker:
     async def update_with_detections(self, frame: np.ndarray, detections: list[BoundingBox]) -> Optional[BoundingBox]:
         """
         Called when the tracker is lost or needs initial acquisition.
-        Uses PicoDet-S detections to lock the Sky Tracker.
+        Uses PicoDet-S detections to lock the OpenCV Tracker.
         """
-        if not self._sky_tracker:
-            return None
-
         # Pick highest confidence person detection
         person_dets = [d for d in detections if d.class_id == 0]
         if not person_dets:
@@ -94,15 +85,16 @@ class SubjectTracker:
         abs_x = (best.x_center * w) - (abs_w / 2)
         abs_y = (best.y_center * h) - (abs_h / 2)
 
-        # Lock the Sky Tracker
-        self._sky_tracker.lock(frame, bbox=(int(abs_x), int(abs_y), int(abs_w), int(abs_h)))
+        # Lock the OpenCV Tracker
+        self._tracker = cv2.TrackerMIL_create()
+        self._tracker.init(frame, (int(abs_x), int(abs_y), int(abs_w), int(abs_h)))
         
         self._current_bbox = best
         self._is_tracking = True
         self._track_id += 1
 
         log.info(
-            f"Sky Tracker locked (ID={self._track_id}): "
+            f"MIL Tracker locked (ID={self._track_id}): "
             f"conf={best.confidence:.2f}, pos=({best.x_center:.2f}, {best.y_center:.2f})"
         )
 
@@ -116,42 +108,38 @@ class SubjectTracker:
 
     async def update_with_frame(self, frame: np.ndarray, dt: float) -> Optional[BoundingBox]:
         """
-        Called on intermediate frames. Uses Sky Tracker to follow the target at high FPS.
+        Called on intermediate frames. Uses OpenCV MIL to follow the target at high FPS.
         """
-        if not self._sky_tracker or not self._is_tracking:
+        if not self._tracker or not self._is_tracking:
             return None
 
-        result = self._sky_tracker.update(frame, dt=dt)
+        success, bbox = self._tracker.update(frame)
 
-        if result.lost:
-            log.warning(f"Sky Tracker LOST subject (track_id={self._track_id}) - reason: {result.reason}")
+        if not success:
+            log.warning(f"MIL Tracker LOST subject (track_id={self._track_id})")
             self._is_tracking = False
             self._current_bbox = None
             
             await self.bus.publish(Event(
                 type=EventType.SUBJECT_LOST,
-                data={"track_id": self._track_id, "reason": result.reason},
+                data={"track_id": self._track_id, "reason": "Tracking failed"},
                 source="tracker",
             ))
             return None
 
+        # Unpack bbox (x, y, w, h)
+        abs_x, abs_y, abs_w, abs_h = bbox
+
         # Convert absolute pixel coords back to normalized BoundingBox
         fh, fw = frame.shape[:2]
         self._current_bbox = BoundingBox(
-            x_center=result.cx / fw,
-            y_center=result.cy / fh,
-            width=result.bbox_w / fw,
-            height=result.bbox_h / fh,
-            confidence=result.confidence,
+            x_center=(abs_x + abs_w / 2) / fw,
+            y_center=(abs_y + abs_h / 2) / fh,
+            width=abs_w / fw,
+            height=abs_h / fh,
+            confidence=0.9,  # OpenCV MIL doesn't return confidence
             class_id=0,
         )
-
-        # Sky tracker provides speed (pixels/second). Convert to normalized units.
-        # Note: we don't have directional velocity directly from result.speed, 
-        # so we calculate it from center diff if needed, but for now we'll just
-        # keep it simple or use the last known delta.
-        # Actually, let's calculate from previous center if we want directional.
-        # But for now, we just expose the updated bbox.
 
         return self._current_bbox
 

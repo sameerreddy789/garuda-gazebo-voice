@@ -63,9 +63,8 @@ detector_rtdetr:
   expected_fps: 1               # 1 FPS on Pi 5 CPU (Perfect for Hybrid Tracking!)
 
 tracking:
-  name: "Sky Tracker"
-  description: "C++ CPU Tracker for edge devices"
-  profile: "pi4-target"
+  name: "OpenCV MIL"
+  description: "Open-source CPU Tracker for edge devices"
   lost_subject_timeout_s: 3.0
   reacquire_timeout_s: 10.0
 

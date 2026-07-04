@@ -69,10 +69,10 @@ class TestDetector:
 from unittest.mock import MagicMock, patch
 
 class TestTracker:
-    """Test hybrid subject tracker with sky_tracker."""
+    """Test hybrid subject tracker with OpenCV MIL."""
 
     @pytest.mark.asyncio
-    @patch("garuda.perception.tracker.sky_tracker.Tracker")
+    @patch("garuda.perception.tracker.cv2.TrackerMIL_create")
     async def test_acquire_subject(self, mock_tracker_cls, config, event_bus):
         """Tracker should lock onto the best person detection."""
         mock_instance = MagicMock()
@@ -90,10 +90,10 @@ class TestTracker:
         assert result is not None
         assert tracker.is_tracking is True
         assert result.confidence == 0.9
-        mock_instance.lock.assert_called_once()
+        mock_instance.init.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("garuda.perception.tracker.sky_tracker.Tracker")
+    @patch("garuda.perception.tracker.cv2.TrackerMIL_create")
     async def test_track_across_frames(self, mock_tracker_cls, config, event_bus):
         """Tracker should maintain tracking using update_with_frame."""
         mock_instance = MagicMock()
@@ -108,25 +108,18 @@ class TestTracker:
         ])
 
         # Frame 2: Update (returns tracked result)
-        class MockResult:
-            lost = False
-            cx = 330
-            cy = 240
-            bbox_w = 128
-            bbox_h = 256
-            confidence = 0.88
-
-        mock_instance.update.return_value = MockResult()
+        # OpenCV tracker.update() returns (success, bbox) where bbox is (x, y, w, h)
+        mock_instance.update.return_value = (True, (266, 112, 128, 256))
 
         result = await tracker.update_with_frame(frame, dt=0.033)
 
         assert result is not None
         assert tracker.is_tracking is True
-        assert result.confidence == 0.88
-        assert abs(result.x_center - (330 / 640)) < 0.01
+        assert result.confidence == 0.9
+        assert abs(result.x_center - ((266 + 64) / 640)) < 0.01
 
     @pytest.mark.asyncio
-    @patch("garuda.perception.tracker.sky_tracker.Tracker")
+    @patch("garuda.perception.tracker.cv2.TrackerMIL_create")
     async def test_tracker_lost(self, mock_tracker_cls, config, event_bus):
         """Tracker should handle lost state properly."""
         mock_instance = MagicMock()
@@ -141,11 +134,7 @@ class TestTracker:
         ])
 
         # Frame update says lost
-        class MockLostResult:
-            lost = True
-            reason = "Occlusion"
-
-        mock_instance.update.return_value = MockLostResult()
+        mock_instance.update.return_value = (False, (0, 0, 0, 0))
 
         result = await tracker.update_with_frame(frame, dt=0.033)
         assert result is None
