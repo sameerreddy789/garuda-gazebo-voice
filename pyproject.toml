@@ -18,3 +18,9 @@ garuda = "garuda.main:main"
 
 [tool.setuptools.packages.find]
 include = ["garuda*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "sitl: marks tests that require a real PX4 SITL instance (deselect with '-m \"not sitl\"')",
+]

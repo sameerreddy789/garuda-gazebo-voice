@@ -83,22 +83,22 @@ class CameraFeed:
         Args:
             source: "skydroid", "gazebo", "usb", "file:/path/to/video.mp4",
                     "gazebo:5600" (UDP port for Gazebo stream),
-                    "synthetic", or "auto" (try skydroid → usb → synthetic)
+                    "synthetic", or "auto" (tries usb → synthetic)
+
+            Note: "auto" never tries "gazebo" because probing for a UDP
+            stream blocks indefinitely when no stream exists. To use the
+            Gazebo camera, pass source="gazebo" explicitly.
 
         Returns:
             True if camera started successfully
         """
         if source == "auto":
-            # Try sources in order of preference
-            # In simulation mode, try gazebo first
-            if self.config.is_simulation:
-                for try_source in ["gazebo", "usb", "synthetic"]:
-                    if self._try_start(try_source):
-                        return True
-            else:
-                for try_source in ["usb", "synthetic"]:
-                    if self._try_start(try_source):
-                        return True
+            # Try sources in order of preference.
+            # NOTE: gazebo is intentionally excluded from auto-detection
+            # because the GStreamer/UDP probe blocks when no stream exists.
+            for try_source in ["usb", "synthetic"]:
+                if self._try_start(try_source):
+                    return True
             return False
         else:
             return self._try_start(source)
@@ -157,6 +157,35 @@ class CameraFeed:
         Args:
             udp_port: UDP port receiving the Gazebo camera stream
         """
+        import socket
+
+        # First, do a non-blocking probe: bind a UDP socket to check if
+        # anything is streaming to this port. We listen briefly for data.
+        # This avoids the infinite block that cv2.VideoCapture would do
+        # if no Gazebo instance is actually streaming.
+        try:
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind(("0.0.0.0", udp_port))
+            probe.settimeout(1.5)  # Wait up to 1.5s for a packet
+            try:
+                probe.recvfrom(1024)
+            except socket.timeout:
+                probe.close()
+                log.info(
+                    f"No Gazebo camera stream on UDP port {udp_port} "
+                    f"(no data within 1.5s). Falling back."
+                )
+                return False
+            probe.close()
+        except OSError as e:
+            log.info(
+                f"Cannot probe UDP port {udp_port} ({e}). "
+                f"Falling back."
+            )
+            return False
+
+        # A stream is present — now open it via GStreamer
         url = f"udpsrc port={udp_port} ! application/x-rtp,payload=26 ! " \
               f"rtpjpegdepay ! jpegdec ! videoconvert ! appsink"
 

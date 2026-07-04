@@ -50,13 +50,14 @@ def test_stub_mode():
               f"conf={det.confidence:.2f}")
 
     # Benchmark
-    print("\n  Benchmarking stub detector (100 frames)...")
+    n_frames = 1000  # More frames for stable measurement on fast stubs
+    print(f"\n  Benchmarking stub detector ({n_frames} frames)...")
     start = time.time()
-    for _ in range(100):
+    for _ in range(n_frames):
         detector.detect(frame)
     elapsed = time.time() - start
-    fps = 100 / elapsed
-    print(f"  FPS: {fps:.1f}")
+    fps = n_frames / elapsed if elapsed > 0 else float("inf")
+    print(f"  FPS: {fps:.1f}" + (" (instant)" if fps == float("inf") else ""))
 
     print("\n  ✓ Stub detector test PASSED")
 

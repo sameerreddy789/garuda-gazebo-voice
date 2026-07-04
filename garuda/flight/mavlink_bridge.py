@@ -178,52 +178,57 @@ class MAVLinkBridge:
         else:
             self._connection_mode = "hardware"
 
+        # Connection timeout from config (SITL needs more time to boot)
+        # This is a HARD outer timeout that covers both drone.connect()
+        # and the heartbeat wait, so the system never hangs indefinitely
+        # even if MAVSDK's gRPC subprocess misbehaves on Windows.
+        heartbeat_timeout_s = self.config.get(
+            "px4_sitl.connection_timeout_s",
+            10.0 if self._connection_mode == "hardware" else 15.0,
+        )
+        # Allow extra time for drone.connect() itself (subprocess spawn)
+        hard_timeout_s = heartbeat_timeout_s + 10.0
+
+        # Build connection URL from config
+        if self._connection_mode == "sitl":
+            connection_url = self.config.get(
+                "px4_sitl.connection_url", "udp://localhost:14540"
+            )
+        else:
+            # Real hardware — UART serial
+            connection_url = (
+                f"serial://{self._serial_port}:{self._baud_rate}"
+            )
+
+        log.info(f"Connecting to PX4: {connection_url}")
+        log.info(f"Connection mode: {self._connection_mode}")
+        log.info(f"Heartbeat timeout: {heartbeat_timeout_s}s (hard: {hard_timeout_s}s)")
+
         try:
             # Try importing MAVSDK — may not be installed on dev machines
             from mavsdk import System  # type: ignore
 
             self._drone = System()
 
-            # Build connection URL from config
-            if self._connection_mode == "sitl":
-                connection_url = self.config.get(
-                    "px4_sitl.connection_url", "udp://localhost:14540"
-                )
-            else:
-                # Real hardware — UART serial
-                connection_url = (
-                    f"serial://{self._serial_port}:{self._baud_rate}"
-                )
-
-            # Connection timeout from config (SITL needs more time to boot)
-            timeout_s = self.config.get(
-                "px4_sitl.connection_timeout_s",
-                10.0 if self._connection_mode == "hardware" else 15.0,
-            )
-
-            log.info(f"Connecting to PX4: {connection_url}")
-            log.info(f"Connection mode: {self._connection_mode}")
-            log.info(f"Heartbeat timeout: {timeout_s}s")
-
-            await self._drone.connect(system_address=connection_url)
-
-            # Wait for connection WITH TIMEOUT
-            log.info(f"Waiting for drone heartbeat ({timeout_s}s timeout)...")
+            # Wrap the ENTIRE connection sequence (drone.connect + heartbeat)
+            # in one hard timeout. This prevents the system from hanging if
+            # MAVSDK's subprocess spawn or gRPC channel blocks indefinitely.
             try:
                 await asyncio.wait_for(
-                    self._wait_for_heartbeat(), timeout=timeout_s
+                    self._connect_and_verify(connection_url, heartbeat_timeout_s),
+                    timeout=hard_timeout_s,
                 )
                 log.info("[OK] Connected to PX4 flight controller")
                 log.info(f"  Mode: {self._connection_mode}")
                 # Start real telemetry subscriptions
                 asyncio.create_task(self._subscribe_telemetry())
-            except asyncio.TimeoutError:
+            except (asyncio.TimeoutError, asyncio.TimeoutError) as e:
                 log.warning(
-                    f"PX4 heartbeat timeout ({timeout_s}s) — "
+                    f"PX4 connection timed out (hard {hard_timeout_s}s) — "
                     f"no {'SITL' if self._connection_mode == 'sitl' else 'hardware FC'} running. "
                     "Falling back to simulated telemetry."
                 )
-                self._drone = None  # Release the MAVSDK System
+                await self._force_release_drone()
                 self._connection_mode = "stub"
                 self._is_connected = True
                 asyncio.create_task(self._run_simulated_telemetry())
@@ -243,10 +248,39 @@ class MAVLinkBridge:
         except Exception as e:
             log.error(f"Failed to connect to PX4: {e}")
             log.info("Falling back to simulated telemetry.")
+            await self._force_release_drone()
             self._connection_mode = "stub"
             self._is_connected = True
             asyncio.create_task(self._run_simulated_telemetry())
             return True
+
+    async def _connect_and_verify(
+        self, connection_url: str, heartbeat_timeout_s: float
+    ) -> None:
+        """Connect to the drone and verify the heartbeat.
+
+        This is wrapped in a hard outer timeout by connect() to guarantee
+        the system never hangs if MAVSDK's subprocess misbehaves.
+        """
+        await self._drone.connect(system_address=connection_url)
+        log.info(f"Waiting for drone heartbeat ({heartbeat_timeout_s}s timeout)...")
+        try:
+            await asyncio.wait_for(
+                self._wait_for_heartbeat(), timeout=heartbeat_timeout_s
+            )
+        except asyncio.TimeoutError:
+            # Re-raise as a plain TimeoutError so the outer hard timeout
+            # handler can fall back to stub mode cleanly.
+            raise
+
+    async def _force_release_drone(self) -> None:
+        """Best-effort cleanup of the MAVSDK System object.
+
+        On Windows the gRPC subprocess can be slow to shut down, so we
+        don't await any close logic here — we just drop the reference.
+        The subprocess will be reaped when the process exits.
+        """
+        self._drone = None
 
     async def _wait_for_heartbeat(self) -> None:
         """Wait until MAVSDK reports a connected state."""

@@ -68,12 +68,15 @@ px4_sitl:
 
   # MAVSDK connection URL
   # Format: udp://<host>:<port>
-  #   udp://localhost:14540  — PX4 SITL running on this machine (WSL2)
+  #   udpout://localhost:14540  — Connect to PX4 SITL running locally (WSL2)
+  #   udp://localhost:14540     — Legacy format (works but deprecated)
   #   udp://192.168.1.100:14540 — PX4 SITL on another machine
-  connection_url: "udp://localhost:14540"
+  connection_url: "udpout://localhost:14540"
 
-  # How long to wait for PX4 heartbeat before falling back to stub
-  connection_timeout_s: 15    # SITL may take a few seconds to boot
+  # How long to wait for PX4 heartbeat before falling back to stub.
+  # Lower = faster boot when no SITL is running (default 8s).
+  # Higher = more tolerant of slow SITL startup on cloud instances.
+  connection_timeout_s: 8
 
   # Gazebo model (must match what PX4 SITL was launched with)
   gazebo_model: "x500"        # x500, typhoon_h480, iris, standard_vtol
