@@ -18,6 +18,7 @@ without waking up the heavy LFM — see tool_router.py.
 
 import asyncio
 import json
+import re
 import subprocess
 import os
 from typing import Optional
@@ -169,18 +170,24 @@ class LLMEngine:
 
         log.info(f"LLM processing: \"{text}\"")
 
-        # Build prompt
-        prompt = self._build_prompt(text)
+        # Build base prompt
+        base_prompt = self._build_prompt(text)
+        current_prompt = base_prompt
+        
+        max_retries = 3
+        for attempt in range(max_retries):
+            # Run inference
+            response = await self._infer(current_prompt)
 
-        # Run inference
-        response = await self._infer(prompt)
-
-        if response:
-            # Parse JSON tool call from response
-            tool_call = self._parse_tool_call(response)
+            if not response:
+                log.warning(f"LLM inference returned empty on attempt {attempt+1}")
+                return None
+                
+            # Attempt to parse and validate
+            tool_call, error_msg = self._parse_and_validate(response)
 
             if tool_call:
-                log.info(f"LLM tool call: {tool_call}")
+                log.info(f"LLM tool call (attempt {attempt+1}): {tool_call}")
 
                 # Add to history
                 self._history.append({"role": "user", "content": text})
@@ -197,8 +204,14 @@ class LLMEngine:
                 ))
 
                 return tool_call
+                
+            log.warning(f"Parse/Validation failed on attempt {attempt+1}: {error_msg}")
+            
+            # Feed error back to the LLM
+            if attempt < max_retries - 1:
+                current_prompt += f"{response}\n<|user|>\nInvalid output: {error_msg}. Please fix your JSON output and try again.\n<|assistant|>\n"
 
-        log.warning(f"LLM failed to parse command: \"{text}\"")
+        log.warning(f"LLM failed to parse command after {max_retries} attempts: \"{text}\"")
         return None
 
     def _build_prompt(self, user_text: str) -> str:
@@ -352,25 +365,92 @@ class LLMEngine:
         else:
             return '{"tool": "hover", "args": {}}'
 
+    def _parse_and_validate(self, response: str) -> tuple[Optional[dict], str]:
+        """Parse JSON tool call and validate arguments."""
+        # 1. Parsing
+        parsed_json = self._parse_tool_call(response)
+        if not parsed_json:
+            return None, "Could not extract valid JSON from response"
+            
+        # 2. Validation
+        tool_name = parsed_json.get("tool")
+        if not tool_name:
+            return None, "JSON missing 'tool' key"
+            
+        args = parsed_json.get("args", {})
+        if not isinstance(args, dict):
+            return None, "'args' must be a JSON object"
+            
+        valid_tools = [
+            "takeoff", "land", "rtl", "hover", "track_subject", 
+            "orbit", "chase", "reveal", "start_recording", 
+            "stop_recording", "emergency_stop"
+        ]
+        if tool_name not in valid_tools:
+            return None, f"Unknown tool '{tool_name}'. Available tools: {', '.join(valid_tools)}"
+            
+        # Basic arg validation
+        if tool_name == "takeoff" and "altitude" not in args:
+            return None, "Tool 'takeoff' requires argument 'altitude'"
+        if tool_name == "track_subject" and ("distance" not in args or "framing" not in args):
+            return None, "Tool 'track_subject' requires arguments 'distance' and 'framing'"
+        if tool_name == "orbit" and ("radius" not in args or "speed" not in args or "direction" not in args):
+            return None, "Tool 'orbit' requires 'radius', 'speed', and 'direction'"
+        if tool_name == "chase" and "distance" not in args:
+            return None, "Tool 'chase' requires argument 'distance'"
+        if tool_name == "reveal" and ("speed" not in args or "distance" not in args):
+            return None, "Tool 'reveal' requires arguments 'speed' and 'distance'"
+
+        return parsed_json, ""
+
     def _parse_tool_call(self, response: str) -> Optional[dict]:
-        """Parse a JSON tool call from the LLM response text."""
-        # Try to extract JSON from the response
+        """Parse a JSON tool call from the LLM response text with robust cleanup."""
+        # Clean up markdown code blocks
+        text = response.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        elif text.startswith("```"):
+            text = text[3:]
+            
+        if text.endswith("```"):
+            text = text[:-3]
+            
+        text = text.strip()
+        
+        # Try direct parse
         try:
-            # Direct JSON parse
-            result = json.loads(response)
-            if "tool" in result:
-                return result
+            return json.loads(text)
         except json.JSONDecodeError:
             pass
-
-        # Try to find JSON within the response text
+            
+        # Clean up trailing commas before closing braces (common LLM artifact)
+        text = re.sub(r',\s*}', '}', text)
+        text = re.sub(r',\s*]', ']', text)
+        
         try:
-            start = response.index("{")
-            end = response.rindex("}") + 1
-            json_str = response[start:end]
-            result = json.loads(json_str)
-            if "tool" in result:
-                return result
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+            
+        # Try to find JSON within the text if there's conversational wrapper
+        try:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start != -1 and end != 0 and end > start:
+                json_str = text[start:end]
+                # Fix trailing commas in extracted substring
+                json_str = re.sub(r',\s*}', '}', json_str)
+                json_str = re.sub(r',\s*]', ']', json_str)
+                
+                # Check for missing closing brace - basic auto-fix
+                open_braces = json_str.count('{')
+                close_braces = json_str.count('}')
+                if open_braces > close_braces:
+                    json_str += '}' * (open_braces - close_braces)
+                    
+                result = json.loads(json_str)
+                if "tool" in result:
+                    return result
         except (ValueError, json.JSONDecodeError):
             pass
 

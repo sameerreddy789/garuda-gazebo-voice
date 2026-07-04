@@ -85,6 +85,36 @@ class BoundingBox:
         """Returns (x_error, y_error) from center. Positive = right/down."""
         return (self.x_center - 0.5, self.y_center - 0.5)
 
+    def intersection_over_union(self, other: "BoundingBox") -> float:
+        """Calculate Intersection over Union (IoU) with another bounding box."""
+        # Convert to x1, y1, x2, y2
+        x1_a, y1_a = self.x_center - self.width / 2, self.y_center - self.height / 2
+        x2_a, y2_a = self.x_center + self.width / 2, self.y_center + self.height / 2
+        
+        x1_b, y1_b = other.x_center - other.width / 2, other.y_center - other.height / 2
+        x2_b, y2_b = other.x_center + other.width / 2, other.y_center + other.height / 2
+        
+        # Calculate intersection
+        x_left = max(x1_a, x1_b)
+        y_top = max(y1_a, y1_b)
+        x_right = min(x2_a, x2_b)
+        y_bottom = min(y2_a, y2_b)
+        
+        if x_right < x_left or y_bottom < y_top:
+            return 0.0
+            
+        intersection_area = (x_right - x_left) * (y_bottom - y_top)
+        
+        # Calculate union
+        box_a_area = self.width * self.height
+        box_b_area = other.width * other.height
+        union_area = box_a_area + box_b_area - intersection_area
+        
+        if union_area <= 0:
+            return 0.0
+            
+        return intersection_area / union_area
+
 
 # ── Transform Functions ──────────────────────────────────────────────────────
 

@@ -45,8 +45,29 @@ detector:
   quantization: "INT8"
   confidence_threshold: 0.5
   nms_threshold: 0.45
+  use_tiling: false             # SAHI: Slicing Aided Hyper Inference
+  tiling_overlap: 0.2           # Overlap ratio between tiles
   target_classes: [0]           # 0 = person in COCO
   expected_fps: 50              # 45-55 FPS on RPi5
+
+detector_rtdetr:
+  name: "RT-DETR-R18"
+  description: "Real-Time DEtection TRansformer (ResNet18 backbone)"
+  engine: "onnxruntime"
+  model_file: "rtdetr_r18vd.onnx"
+  download_url: "https://github.com/lyuwenyu/RT-DETR/releases/download/v1.0/rtdetr_r18vd_6x_coco.onnx"
+  expected_size_mb: 85
+  input_width: 640
+  input_height: 640
+  target_classes: [0]
+  expected_fps: 1               # 1 FPS on Pi 5 CPU (Perfect for Hybrid Tracking!)
+
+tracking:
+  name: "Sky Tracker"
+  description: "C++ CPU Tracker for edge devices"
+  profile: "pi4-target"
+  lost_subject_timeout_s: 3.0
+  reacquire_timeout_s: 10.0
 
 visual_odometry:
   name: "SVO2"

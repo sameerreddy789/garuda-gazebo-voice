@@ -66,71 +66,90 @@ class TestDetector:
         pytest.fail("No detections in 30 frames")
 
 
+from unittest.mock import MagicMock, patch
+
 class TestTracker:
-    """Test IoU-based subject tracker."""
+    """Test hybrid subject tracker with sky_tracker."""
 
     @pytest.mark.asyncio
-    async def test_acquire_subject(self, config, event_bus):
-        """Tracker should acquire a new subject from detections."""
+    @patch("garuda.perception.tracker.sky_tracker.Tracker")
+    async def test_acquire_subject(self, mock_tracker_cls, config, event_bus):
+        """Tracker should lock onto the best person detection."""
+        mock_instance = MagicMock()
+        mock_tracker_cls.return_value = mock_instance
+
         tracker = SubjectTracker(config, event_bus)
 
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
         detections = [
             BoundingBox(x_center=0.5, y_center=0.5, width=0.2,
                         height=0.4, confidence=0.9, class_id=0)
         ]
 
-        result = await tracker.update(detections)
+        result = await tracker.update_with_detections(frame, detections)
         assert result is not None
         assert tracker.is_tracking is True
         assert result.confidence == 0.9
+        mock_instance.lock.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_track_across_frames(self, config, event_bus):
-        """Tracker should maintain tracking when IoU is high."""
-        tracker = SubjectTracker(config, event_bus)
+    @patch("garuda.perception.tracker.sky_tracker.Tracker")
+    async def test_track_across_frames(self, mock_tracker_cls, config, event_bus):
+        """Tracker should maintain tracking using update_with_frame."""
+        mock_instance = MagicMock()
+        mock_tracker_cls.return_value = mock_instance
 
-        # Frame 1: Acquire
-        await tracker.update([
+        tracker = SubjectTracker(config, event_bus)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # Frame 1: Lock
+        await tracker.update_with_detections(frame, [
             BoundingBox(0.5, 0.5, 0.2, 0.4, 0.9, 0)
         ])
 
-        # Frame 2: Slight movement (high IoU)
-        result = await tracker.update([
-            BoundingBox(0.52, 0.51, 0.2, 0.4, 0.88, 0)
-        ])
+        # Frame 2: Update (returns tracked result)
+        class MockResult:
+            lost = False
+            cx = 330
+            cy = 240
+            bbox_w = 128
+            bbox_h = 256
+            confidence = 0.88
+
+        mock_instance.update.return_value = MockResult()
+
+        result = await tracker.update_with_frame(frame, dt=0.033)
 
         assert result is not None
         assert tracker.is_tracking is True
-        assert abs(result.x_center - 0.52) < 0.01
+        assert result.confidence == 0.88
+        assert abs(result.x_center - (330 / 640)) < 0.01
 
     @pytest.mark.asyncio
-    async def test_no_detection_uses_prediction(self, config, event_bus):
-        """Tracker should predict position when detection is missing."""
-        tracker = SubjectTracker(config, event_bus)
+    @patch("garuda.perception.tracker.sky_tracker.Tracker")
+    async def test_tracker_lost(self, mock_tracker_cls, config, event_bus):
+        """Tracker should handle lost state properly."""
+        mock_instance = MagicMock()
+        mock_tracker_cls.return_value = mock_instance
 
-        # Acquire subject
-        await tracker.update([
+        tracker = SubjectTracker(config, event_bus)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # Acquire
+        await tracker.update_with_detections(frame, [
             BoundingBox(0.5, 0.5, 0.2, 0.4, 0.9, 0)
         ])
 
-        # Missing detection — should return predicted position
-        result = await tracker.update([])
-        assert result is not None  # Should have a predicted bbox
-        assert tracker.is_tracking is True  # Not lost yet
+        # Frame update says lost
+        class MockLostResult:
+            lost = True
+            reason = "Occlusion"
 
-    def test_iou_computation(self, config, event_bus):
-        """Verify IoU computation is correct."""
-        box_a = BoundingBox(0.5, 0.5, 0.2, 0.2, 1.0, 0)
-        box_b = BoundingBox(0.5, 0.5, 0.2, 0.2, 1.0, 0)
-        iou = SubjectTracker._compute_iou(box_a, box_b)
-        assert abs(iou - 1.0) < 0.001  # Identical boxes = IoU 1.0
+        mock_instance.update.return_value = MockLostResult()
 
-    def test_iou_no_overlap(self, config, event_bus):
-        """Non-overlapping boxes should have IoU = 0."""
-        box_a = BoundingBox(0.1, 0.1, 0.1, 0.1, 1.0, 0)
-        box_b = BoundingBox(0.9, 0.9, 0.1, 0.1, 1.0, 0)
-        iou = SubjectTracker._compute_iou(box_a, box_b)
-        assert iou == 0.0
+        result = await tracker.update_with_frame(frame, dt=0.033)
+        assert result is None
+        assert tracker.is_tracking is False
 
 
 class TestTransforms:

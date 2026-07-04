@@ -229,6 +229,9 @@ async def _perception_loop(
     made available to the flight controller.
     """
     log.info("Perception loop started")
+    import time
+    frame_count = 0
+    last_frame_time = time.time()
 
     while True:
         try:
@@ -238,11 +241,20 @@ async def _perception_loop(
                 await asyncio.sleep(0.01)
                 continue
 
-            # Detect objects
-            detections = detector.detect(frame)
+            now = time.time()
+            dt = now - last_frame_time
+            last_frame_time = now
+            frame_count += 1
 
-            # Track subject
-            bbox = await tracker.update(detections)
+            # Hybrid Detection + Tracking
+            if frame_count % 30 == 0 or not tracker.is_tracking:
+                # 1 FPS detection (heavy)
+                detections = detector.detect(frame)
+                bbox = await tracker.update_with_detections(frame, detections)
+            else:
+                # 30 FPS tracking (lightweight)
+                bbox = await tracker.update_with_frame(frame, dt)
+
             perception_iface.current_bbox = bbox
 
             # Visual odometry (pose + depth)

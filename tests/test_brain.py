@@ -118,3 +118,54 @@ class TestToolRouter:
         result = await router.route_command("emergency")
         assert result is not None
         assert result["tool"] == "emergency_stop"
+
+class TestLLMEngine:
+    """Test LLMEngine harness optimization (parsing and validation)."""
+
+    @pytest.fixture
+    def engine(self, config, event_bus):
+        from garuda.brain.llm_engine import LLMEngine
+        engine = LLMEngine(config, event_bus)
+        return engine
+
+    def test_parse_valid_json(self, engine):
+        response = '{"tool": "orbit", "args": {"radius": 8.0, "speed": 2.0, "direction": "clockwise"}}'
+        result = engine._parse_tool_call(response)
+        assert result is not None
+        assert result["tool"] == "orbit"
+
+    def test_parse_markdown_json(self, engine):
+        response = '```json\n{"tool": "takeoff", "args": {"altitude": 5.0}}\n```'
+        result = engine._parse_tool_call(response)
+        assert result is not None
+        assert result["tool"] == "takeoff"
+
+    def test_parse_trailing_comma(self, engine):
+        response = '{"tool": "land", "args": {}, }'
+        result = engine._parse_tool_call(response)
+        assert result is not None
+        assert result["tool"] == "land"
+
+    def test_parse_missing_brace(self, engine):
+        response = '{"tool": "rtl", "args": {}'
+        result = engine._parse_tool_call(response)
+        assert result is not None
+        assert result["tool"] == "rtl"
+
+    def test_validate_valid_tool(self, engine):
+        response = '{"tool": "takeoff", "args": {"altitude": 5.0}}'
+        tool_call, error = engine._parse_and_validate(response)
+        assert tool_call is not None
+        assert error == ""
+
+    def test_validate_missing_args(self, engine):
+        response = '{"tool": "takeoff", "args": {}}'
+        tool_call, error = engine._parse_and_validate(response)
+        assert tool_call is None
+        assert "requires argument 'altitude'" in error
+
+    def test_validate_unknown_tool(self, engine):
+        response = '{"tool": "do_a_flip", "args": {}}'
+        tool_call, error = engine._parse_and_validate(response)
+        assert tool_call is None
+        assert "Unknown tool 'do_a_flip'" in error

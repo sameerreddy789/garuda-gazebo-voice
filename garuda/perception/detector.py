@@ -144,12 +144,102 @@ class PicoDetector:
             return []
 
         with profiler.measure("detector"):
-            if self._backend == "ncnn":
-                return self._detect_ncnn(frame)
-            elif self._backend == "opencv":
-                return self._detect_opencv(frame)
+            if self.config.get("detector.use_tiling", False):
+                return self._detect_with_tiling(frame)
             else:
-                return self._detect_stub(frame)
+                if self._backend == "ncnn":
+                    return self._detect_ncnn(frame)
+                elif self._backend == "opencv":
+                    return self._detect_opencv(frame)
+                else:
+                    return self._detect_stub(frame)
+
+    def _detect_with_tiling(self, frame: np.ndarray) -> list[BoundingBox]:
+        """Run SAHI (Slicing Aided Hyper Inference) via image tiling."""
+        h, w = frame.shape[:2]
+        overlap = self.config.get("detector.tiling_overlap", 0.2)
+        
+        all_detections = []
+        
+        # 1. Full frame inference
+        if self._backend == "ncnn":
+            all_detections.extend(self._detect_ncnn(frame))
+        elif self._backend == "opencv":
+            all_detections.extend(self._detect_opencv(frame))
+        else:
+            all_detections.extend(self._detect_stub(frame))
+            
+        # If stub, just return (tiling doesn't make sense for stub)
+        if self._backend == "stub":
+            return all_detections
+            
+        # 2. Tile inference (4 quadrants with overlap)
+        # Calculate tile size
+        tile_w = int(w / (2 - overlap))
+        tile_h = int(h / (2 - overlap))
+        
+        # Define the 4 top-left corners of the tiles
+        origins = [
+            (0, 0),                                # Top-Left
+            (w - tile_w, 0),                       # Top-Right
+            (0, h - tile_h),                       # Bottom-Left
+            (w - tile_w, h - tile_h),              # Bottom-Right
+        ]
+        
+        for x_offset, y_offset in origins:
+            tile = frame[y_offset:y_offset + tile_h, x_offset:x_offset + tile_w]
+            
+            # Run inference on tile
+            if self._backend == "ncnn":
+                tile_dets = self._detect_ncnn(tile)
+            else:
+                tile_dets = self._detect_opencv(tile)
+                
+            # Translate normalized tile coordinates to normalized full-frame coordinates
+            for det in tile_dets:
+                # Convert from tile normalized to tile absolute
+                abs_cx = det.x_center * tile_w
+                abs_cy = det.y_center * tile_h
+                abs_width = det.width * tile_w
+                abs_height = det.height * tile_h
+                
+                # Add offset
+                global_cx = abs_cx + x_offset
+                global_cy = abs_cy + y_offset
+                
+                # Convert to global normalized
+                det.x_center = global_cx / w
+                det.y_center = global_cy / h
+                det.width = abs_width / w
+                det.height = abs_height / h
+                
+                all_detections.append(det)
+                
+        # 3. Apply NMS to merge overlapping detections
+        return self._nms(all_detections)
+
+    def _nms(self, detections: list[BoundingBox]) -> list[BoundingBox]:
+        """Apply Non-Maximum Suppression to remove duplicate bounding boxes."""
+        if not detections:
+            return []
+            
+        # Sort by confidence descending
+        detections = sorted(detections, key=lambda x: x.confidence, reverse=True)
+        keep = []
+        
+        for det in detections:
+            is_duplicate = False
+            for kept_det in keep:
+                if det.class_id == kept_det.class_id:
+                    iou = det.intersection_over_union(kept_det)
+                    if iou > self._nms_threshold:
+                        is_duplicate = True
+                        break
+            
+            if not is_duplicate:
+                keep.append(det)
+                
+        return keep
 
     def _detect_ncnn(self, frame: np.ndarray) -> list[BoundingBox]:
         """Real ncnn inference path for PicoDet-S.
