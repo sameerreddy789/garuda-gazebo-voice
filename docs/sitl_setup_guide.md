@@ -123,7 +123,7 @@ chmod +x scripts/setup_sitl.sh
 The script automatically:
 1. ✅ Installs all system dependencies (cmake, gazebo, python, etc.)
 2. ✅ Downloads GeographicLib datasets (for accurate GPS)
-3. ✅ Clones PX4 Autopilot from GitHub (~1.5GB)
+3. ✅ Clones PX4 Autopilot from GitHub alongside DroneOS (~1.5GB)
 4. ✅ Builds PX4 SITL target (10-20 minutes)
 5. ✅ Installs MAVProxy and MAVLink tools
 6. ✅ Creates launch scripts
@@ -131,7 +131,7 @@ The script automatically:
 ### 2.3 If the build fails
 ```bash
 # Clean and retry
-cd ~/PX4-Autopilot
+cd ../PX4-Autopilot
 make distclean
 make px4_sitl_rtps
 ```
@@ -148,7 +148,7 @@ make px4_sitl_rtps
 ### 3.1 Start the simulator
 From **WSL2 Ubuntu**:
 ```bash
-cd ~/PX4-Autopilot
+cd ../PX4-Autopilot
 make px4_sitl_rtps gazebo_x500
 ```
 
@@ -278,7 +278,7 @@ python -m garuda.main
 ### Change the SITL drone model
 ```bash
 # Inside WSL2 — different drone models:
-cd ~/PX4-Autopilot
+cd ../PX4-Autopilot
 make px4_sitl_rtps gazebo_x500         # Quadcopter (default)
 make px4_sitl_rtps gazebo_typhoon_h480  # Hex with gimbal (closest to GarudaOne)
 make px4_sitl_rtps gazebo_iris          # Standard PX4 quad
@@ -330,7 +330,7 @@ hostname -I
 **Fix:** Install WSLg (Windows 11) or use headless mode:
 ```bash
 # Headless mode (no GUI, but SITL still works)
-cd ~/PX4-Autopilot
+cd ../PX4-Autopilot
 HEADLESS=1 make px4_sitl_rtps gazebo_x500
 ```
 
@@ -338,7 +338,7 @@ HEADLESS=1 make px4_sitl_rtps gazebo_x500
 
 **Fix:**
 ```bash
-cd ~/PX4-Autopilot
+cd ../PX4-Autopilot
 git submodule update --init --recursive
 make distclean
 make px4_sitl_rtps

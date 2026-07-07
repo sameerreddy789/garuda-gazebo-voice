@@ -99,7 +99,9 @@ echo "  ✓ GeographicLib datasets installed"
 echo ""
 echo "▸ Step 3/6: Cloning PX4 Autopilot..."
 
-PX4_DIR="$HOME/PX4-Autopilot"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="$(dirname "$PROJECT_DIR")"
+PX4_DIR="$BASE_DIR/PX4-Autopilot"
 
 if [ -d "$PX4_DIR" ]; then
     echo "  ✓ PX4 Autopilot already exists at $PX4_DIR"
@@ -109,7 +111,7 @@ if [ -d "$PX4_DIR" ]; then
     git pull --ff-only || echo "  ⚠ Could not update (local changes?). Using existing clone."
 else
     echo "  Cloning PX4 Autopilot (~1.5GB, first time only)..."
-    cd "$HOME"
+    cd "$BASE_DIR"
     git clone --recursive https://github.com/PX4/PX4-Autopilot.git
     echo "  ✓ PX4 Autopilot cloned to $PX4_DIR"
 fi
@@ -123,7 +125,7 @@ cd "$PX4_DIR"
 
 # Use ccache to speed up rebuilds
 export CCACHE_MAXSIZE=5G
-export CCACHE_DIR="$HOME/.ccache/px4"
+export CCACHE_DIR="$BASE_DIR/.ccache/px4"
 
 # Check if already built
 if [ -f "build/px4_sitl_rtps/px4" ]; then
@@ -154,7 +156,7 @@ echo ""
 echo "▸ Step 6/6: Creating launch scripts..."
 
 # Create the PX4 SITL launch script
-cat > "$HOME/px4_sitl_launch.sh" << 'LAUNCH_EOF'
+cat > "$BASE_DIR/px4_sitl_launch.sh" << 'LAUNCH_EOF'
 #!/bin/bash
 # =============================================================================
 # GarudaOne — PX4 SITL + Gazebo Launcher
@@ -173,7 +175,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Default settings (override via environment variables)
-PX4_DIR="${PX4_DIR:-$HOME/PX4-Autopilot}"
+PX4_DIR="${PX4_DIR:-$SCRIPT_DIR/PX4-Autopilot}"
 MODEL="${SITL_MODEL:-x500}"
 HOME_LAT="${SITL_LAT:-12.9716}"
 HOME_LON="${SITL_LON:-77.5946}"
@@ -211,10 +213,10 @@ cd "$PX4_DIR"
 make px4_sitl_rtps gazebo_"$MODEL"
 LAUNCH_EOF
 
-chmod +x "$HOME/px4_sitl_launch.sh"
+chmod +x "$BASE_DIR/px4_sitl_launch.sh"
 
 # Also create the script inside the DroneOS project for convenience
-cat > "$HOME/DroneOS/scripts/launch_sitl.sh" << 'LAUNCH_EOF'
+cat > "$PROJECT_DIR/scripts/launch_sitl.sh" << 'LAUNCH_EOF'
 #!/bin/bash
 # =============================================================================
 # GarudaOne — PX4 SITL Launcher (from Windows)
@@ -249,7 +251,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Default settings (Bangalore, India)
-PX4_DIR="${PX4_DIR:-$HOME/PX4-Autopilot}"
+PX4_DIR="${PX4_DIR:-$SCRIPT_DIR/../../PX4-Autopilot}"
 HOME_LAT="${SITL_LAT:-12.9716}"
 HOME_LON="${SITL_LON:-77.5946}"
 HOME_ALT="${SITL_ALT:-920.0}"
@@ -279,11 +281,11 @@ cd "$PX4_DIR"
 make px4_sitl_rtps gazebo_"$MODEL"
 LAUNCH_EOF
 
-chmod +x "$HOME/DroneOS/scripts/launch_sitl.sh"
+chmod +x "$PROJECT_DIR/scripts/launch_sitl.sh"
 
 echo "  ✓ Launch scripts created"
-echo "    - $HOME/px4_sitl_launch.sh (global)"
-echo "    - $HOME/DroneOS/scripts/launch_sitl.sh (project)"
+echo "    - $BASE_DIR/px4_sitl_launch.sh (global)"
+echo "    - $PROJECT_DIR/scripts/launch_sitl.sh (project)"
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
@@ -294,11 +296,11 @@ echo ""
 echo "  Next steps:"
 echo ""
 echo "  1. Launch PX4 SITL (inside WSL2):"
-echo "     cd ~/PX4-Autopilot"
+echo "     cd $BASE_DIR/PX4-Autopilot"
 echo "     ./make px4_sitl_rtps gazebo_x500"
 echo ""
 echo "     Or from anywhere:"
-echo "     ~/px4_sitl_launch.sh"
+echo "     $BASE_DIR/px4_sitl_launch.sh"
 echo ""
 echo "  2. Open QGroundControl on Windows:"
 echo "     Download from: https://qgroundcontrol.com/downloads/"
@@ -320,5 +322,5 @@ echo ""
 echo "  Troubleshooting:"
 echo "     - If Gazebo won't start: 'export DISPLAY=:0' or use 'headless' mode"
 echo "     - If MAVSDK can't connect: check Windows Firewall allows UDP 14540"
-echo "     - If build fails: 'cd ~/PX4-Autopilot && make distclean && make px4_sitl_rtps'"
+echo "     - If build fails: 'cd $BASE_DIR/PX4-Autopilot && make distclean && make px4_sitl_rtps'"
 echo ""
