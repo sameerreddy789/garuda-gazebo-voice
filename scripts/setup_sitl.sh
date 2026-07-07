@@ -69,7 +69,7 @@ if [ -f "build/px4_sitl_default/bin/px4" ]; then
     echo "  ✓ PX4 SITL already built."
 else
     # Build only the SITL target 
-    make px4_sitl default
+    make px4_sitl
     echo "  ✓ PX4 SITL build complete"
 fi
 

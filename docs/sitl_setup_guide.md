@@ -235,6 +235,14 @@ Waiting for drone heartbeat (15s timeout)...
 If PX4 SITL is **running**: Real flight dynamics! ✅
 If PX4 SITL is **NOT running**: Falls back to stub telemetry (fake data) ✅
 
+### 5.4 Simple Test Flight (WSL UDP Bypass)
+Because WSL2 isolates UDP network traffic, sometimes Python scripts running in Windows PowerShell cannot receive telemetry from the Gazebo simulator. To fix this, you can run Python test scripts directly inside WSL.
+
+To test a simple automated takeoff in Gazebo, run this from your Windows PowerShell:
+```powershell
+wsl bash -c "python3 -m venv /tmp/venv && /tmp/venv/bin/pip install mavsdk && /tmp/venv/bin/python /mnt/d/Aatonovaz/DroneOS/scripts/test_flight.py"
+```
+
 ---
 
 ## Step 6: Test Voice Commands
