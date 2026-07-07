@@ -149,7 +149,7 @@ make px4_sitl_rtps
 From **WSL2 Ubuntu**:
 ```bash
 cd ../PX4-Autopilot
-make px4_sitl_rtps gazebo_x500
+make px4_sitl gz_x500
 ```
 
 This launches:
@@ -280,8 +280,8 @@ python -m garuda.main
 # Inside WSL2 — different drone models:
 cd ../PX4-Autopilot
 make px4_sitl_rtps gazebo_x500         # Quadcopter (default)
-make px4_sitl_rtps gazebo_typhoon_h480  # Hex with gimbal (closest to GarudaOne)
-make px4_sitl_rtps gazebo_iris          # Standard PX4 quad
+make px4_sitl gz_typhoon_h480  # Hex with gimbal (closest to GarudaOne)
+make px4_sitl gz_iris          # Standard PX4 quad
 ```
 
 ### Change home location
