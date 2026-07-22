@@ -71,7 +71,10 @@ px4_sitl:
   #   udpout://localhost:14540  — Connect to PX4 SITL running locally (WSL2)
   #   udp://localhost:14540     — Legacy format (works but deprecated)
   #   udp://192.168.1.100:14540 — PX4 SITL on another machine
-  connection_url: "udpout://localhost:14540"
+  # VERIFIED (multi-vehicle SITL logs): PX4 sends its onboard MAVLink stream
+  # TO the API port (local 14580 -> remote 14540), so the companion must
+  # LISTEN. udpin binds/listens; udpout silently fails -> stub fallback.
+  connection_url: "udpin://0.0.0.0:14540"
 
   # How long to wait for PX4 heartbeat before falling back to stub.
   # Lower = faster boot when no SITL is running (default 8s).
@@ -124,3 +127,25 @@ domain_randomization:
     motion_blur: false       # Enable motion blur on simulated camera
     iso_noise: false         # Add ISO grain to frames
     lens_flare: false         # Enable lens flare effects
+
+
+# =============================================================================
+# Multi-Vehicle Swarm (PX4 multi-vehicle SITL over MAVSDK)
+# =============================================================================
+# PX4 multi-vehicle SITL assigns each instance its own MAVSDK remote UDP port
+# starting at base_port (instance 0 -> 14540, instance 1 -> 14541, ...). One
+# mavsdk.System per port keeps telemetry/commands isolated with no ROS 2.
+#
+# Launch N SITL instances first, e.g. (inside WSL2):
+#   ./Tools/simulation/sitl_multiple_run.sh -n 2
+# then bring the swarm substrate up from DroneOS.
+# =============================================================================
+
+swarm:
+  enabled: false               # informational flag for higher layers
+  drone_count: 2               # number of vehicles / sequential ports
+  base_port: 14540             # first MAVSDK UDP port (PX4 default)
+  base_grpc_port: 50051        # first mavsdk_server gRPC port; each drone gets base+i (must be unique per drone)
+  connection_scheme: "udpin"   # udpin: MAVSDK listens on 14540+i (VERIFIED vs PX4 SITL) | udpout | udp
+  connection_host: "localhost"
+  connection_timeout_s: 10     # per-drone heartbeat timeout before skipping

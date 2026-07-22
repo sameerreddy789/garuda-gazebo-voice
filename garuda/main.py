@@ -35,7 +35,7 @@ from garuda.core.events import EventBus
 from garuda.core.orchestrator import Orchestrator
 from garuda.flight.mavlink_bridge import MAVLinkBridge
 from garuda.flight.safety import SafetyWatchdog
-from garuda.perception.detector import PicoDetector
+from garuda.perception.detector import AerialDetector, PicoDetector
 from garuda.perception.tracker import SubjectTracker
 from garuda.perception.visual_odom import VisualOdometry
 from garuda.utils.logger import get_logger
@@ -55,6 +55,24 @@ BANNER = r"""
   DroneOS v{version} -- Autonomous AI Cinematography
   -----------------------------------------------------
 """
+
+
+def _make_detector(config: Config):
+    """Select the detector implementation from config.
+
+    ``detector.variant``:
+      - "picodet" (default) -> PicoDetector (ncnn / OpenCV-ONNX / stub)
+      - "aerial" / "yolo"   -> AerialDetector (YOLO VisDrone ONNX / stub)
+
+    Both share the same interface (load_model / detect), so the rest of the
+    boot sequence is agnostic to the choice.
+    """
+    variant = str(config.get("detector.variant", "picodet")).lower()
+    if variant in ("aerial", "yolo"):
+        log.info("Detector variant: aerial (YOLO)")
+        return AerialDetector(config)
+    log.info("Detector variant: picodet")
+    return PicoDetector(config)
 
 
 async def boot() -> None:
@@ -83,7 +101,7 @@ async def boot() -> None:
     log.info("=== Step 4/7: Loading AI models ===")
 
     # Perception
-    detector = PicoDetector(config)
+    detector = _make_detector(config)
     detector.load_model()
 
     tracker = SubjectTracker(config, bus)

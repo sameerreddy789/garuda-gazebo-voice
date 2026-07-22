@@ -68,7 +68,8 @@ class GarudaLogger:
             f"garuda_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
         )
         file_handler = RotatingFileHandler(
-            log_file, maxBytes=50 * 1024 * 1024, backupCount=5
+            log_file, maxBytes=50 * 1024 * 1024, backupCount=5,
+            encoding="utf-8",
         )
         file_handler.setLevel(logging.DEBUG)
         file_fmt = logging.Formatter(

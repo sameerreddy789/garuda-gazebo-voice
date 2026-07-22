@@ -33,6 +33,10 @@ tool_router:
 
 # --- Layer 2: Perception ---
 detector:
+  # Which detector implementation main.py instantiates:
+  #   "picodet" (default) -> PicoDetector (ncnn / OpenCV-ONNX / stub)
+  #   "aerial"            -> AerialDetector (YOLO VisDrone ONNX / stub)
+  variant: "picodet"
   name: "PicoDet-S"
   description: "Mobile object detector optimized for ARM"
   engine: "ncnn"
@@ -61,6 +65,26 @@ detector_rtdetr:
   input_height: 640
   target_classes: [0]
   expected_fps: 1               # 1 FPS on Pi 5 CPU (Perfect for Hybrid Tracking!)
+
+# Aerial small-object detector (Track 1 SAR). Used when detector.variant == "aerial".
+# Pretrained VisDrone YOLO ONNX weights are available on Hugging Face
+# (e.g. yolov11n trained on VisDrone). Export/download to models/ then flip
+# detector.variant to "aerial". Falls back to a stub when the file is absent.
+detector_aerial:
+  name: "YOLO11n-VisDrone"
+  description: "YOLOv8/v11 ONNX for aerial person/small-object detection"
+  engine: "opencv_dnn"          # cv2.dnn.readNetFromONNX (no ROS, no extra deps)
+  model_onnx: "yolov11n_visdrone.onnx"
+  input_width: 640
+  input_height: 640
+  confidence_threshold: 0.4
+  nms_threshold: 0.45
+  persons_only: true            # keep only "person-like" detections
+  # VisDrone class map: 0=pedestrian, 1=people, 2=bicycle, 3=car, 4=van,
+  # 5=truck, 6=tricycle, 7=awning-tricycle, 8=bus, 9=motor.
+  # Both 0 and 1 are humans -> re-mapped to class_id 0 for the tracker.
+  person_class_ids: [0, 1]
+  num_classes: 10
 
 tracking:
   name: "OpenCV MIL"
