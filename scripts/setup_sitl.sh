@@ -15,35 +15,35 @@ set -e
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE_DIR="$(dirname "$PROJECT_DIR")"
-PX4_DIR="$BASE_DIR/PX4-Autopilot"
+PX4_DIR="${PX4_DIR:-$HOME/PX4-Autopilot}"
 
 echo ""
-echo "════════════════════════════════════════════════════════════════════════"
+echo "========================================================================"
 echo "  GarudaOne DroneOS — PX4 SITL Environment Setup (WSL2)"
-echo "════════════════════════════════════════════════════════════════════════"
+echo "========================================================================"
 echo ""
 
 # Ask for sudo upfront
-echo "Please enter your WSL password for sudo access:"
+echo "Verifying sudo access..."
 sudo -v
 
 # Keep sudo alive
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
 # ── Step 1: Clone PX4 Autopilot ──────────────────────────────────────────
-echo "▸ Step 1/4: Cloning PX4 Autopilot..."
+echo "[Step 1/4] Cloning PX4 Autopilot into $PX4_DIR..."
 
 if [ -d "$PX4_DIR" ]; then
-    echo "  ✓ PX4 Autopilot already exists at $PX4_DIR"
+    echo "  [OK] PX4 Autopilot already exists at $PX4_DIR"
     echo "    Updating to latest..."
     cd "$PX4_DIR"
     git fetch --all
-    git pull --ff-only || echo "  ⚠ Could not update (local changes?). Using existing clone."
+    git pull --ff-only || echo "  [WARNING] Could not update (local changes?). Using existing clone."
 else
     echo "  Cloning PX4 Autopilot (~1.5GB, first time only)..."
-    cd "$BASE_DIR"
-    git clone --recursive https://github.com/PX4/PX4-Autopilot.git
-    echo "  ✓ PX4 Autopilot cloned to $PX4_DIR"
+    cd "$(dirname "$PX4_DIR")"
+    git clone --recursive https://github.com/PX4/PX4-Autopilot.git "$PX4_DIR"
+    echo "  [OK] PX4 Autopilot cloned to $PX4_DIR"
 fi
 
 # ── Step 2: Install Dependencies via PX4's Official Script ─────────────────
@@ -61,7 +61,7 @@ echo "▸ Step 3/4: Building PX4 SITL target..."
 echo "  (This takes ~10-20 minutes on first build)"
 
 export CCACHE_MAXSIZE=5G
-export CCACHE_DIR="$BASE_DIR/.ccache/px4"
+export CCACHE_DIR="${CCACHE_DIR:-$HOME/.ccache/px4}"
 
 cd "$PX4_DIR"
 # Check if already built
@@ -83,7 +83,7 @@ cat > "$BASE_DIR/px4_sitl_launch.sh" << 'LAUNCH_EOF'
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PX4_DIR="${PX4_DIR:-$SCRIPT_DIR/PX4-Autopilot}"
+PX4_DIR="${PX4_DIR:-$HOME/PX4-Autopilot}"
 MODEL="${SITL_MODEL:-x500}"
 HOME_LAT="${SITL_LAT:-12.9716}"
 HOME_LON="${SITL_LON:-77.5946}"
@@ -107,7 +107,7 @@ cat > "$PROJECT_DIR/scripts/launch_sitl.sh" << 'LAUNCH_EOF'
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PX4_DIR="${PX4_DIR:-$SCRIPT_DIR/../../PX4-Autopilot}"
+PX4_DIR="${PX4_DIR:-$HOME/PX4-Autopilot}"
 
 MODEL="x500"
 while [[ $# -gt 0 ]]; do

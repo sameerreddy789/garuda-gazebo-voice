@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sdf version="1.9">
+  <world name="airfield_obstacles">
+    <physics type="ode">
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>250</real_time_update_rate>
+    </physics>
+    <gravity>0 0 -9.8</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type="adiabatic"/>
+    <scene>
+      <grid>true</grid>
+      <ambient>0.6 0.6 0.6 1</ambient>
+      <background>0.7 0.8 0.9 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <!-- ── Sun Light ── -->
+    <light name="sun" type="directional">
+      <pose>0 0 500 0 0 0</pose>
+      <cast_shadows>true</cast_shadows>
+      <intensity>1.2</intensity>
+      <direction>0.3 0.4 -0.8</direction>
+      <diffuse>0.95 0.95 0.95 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+    </light>
+
+    <!-- ── Asphalt Airfield Ground ── -->
+    <model name="airfield_ground">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>600 600</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>600 600</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.25 0.25 0.28 1</ambient>
+            <diffuse>0.3 0.3 0.32 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Takeoff Helipad (Origin: 0, 0, 0) ── -->
+    <include>
+      <name>takeoff_helipad</name>
+      <uri>model://helipad</uri>
+      <pose>0 0 0.01 0 0 0</pose>
+    </include>
+
+    <!-- ── Parked Aircraft 1: Cessna ── -->
+    <include>
+      <name>parked_cessna</name>
+      <uri>model://rc_cessna</uri>
+      <pose>20 12 0.25 0 0 0.75</pose>
+    </include>
+
+    <!-- ── Parked Aircraft 2: Advanced Jet Plane ── -->
+    <include>
+      <name>parked_jet</name>
+      <uri>model://advanced_plane</uri>
+      <pose>-30 25 0.25 0 0 -0.5</pose>
+    </include>
+
+    <!-- ── Obstacle 1: Air Traffic Control Tower (35m tall) ── -->
+    <model name="control_tower">
+      <static>true</static>
+      <pose>35 -30 17.5 0 0 0</pose>
+      <link name="tower_body">
+        <collision name="tower_col">
+          <geometry>
+            <cylinder>
+              <radius>4.0</radius>
+              <length>35.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="tower_vis">
+          <geometry>
+            <cylinder>
+              <radius>4.0</radius>
+              <length>35.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.85 0.85 0.85 1</ambient>
+            <diffuse>0.9 0.9 0.9 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <!-- Tower Observation Deck at top -->
+      <link name="observation_deck">
+        <pose>0 0 17.5 0 0 0</pose>
+        <visual name="deck_vis">
+          <geometry>
+            <cylinder>
+              <radius>7.0</radius>
+              <length>5.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.2 0.4 0.8 1</ambient>
+            <diffuse>0.2 0.5 0.9 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Obstacle 2: Airport Hangar Building (20m tall) ── -->
+    <model name="aircraft_hangar">
+      <static>true</static>
+      <pose>-50 -35 10.0 0 0 0.1</pose>
+      <link name="hangar_link">
+        <collision name="hangar_col">
+          <geometry>
+            <box>
+              <size>35.0 25.0 20.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="hangar_vis">
+          <geometry>
+            <box>
+              <size>35.0 25.0 20.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.3 0.35 0.4 1</ambient>
+            <diffuse>0.35 0.4 0.45 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Obstacle 3: Communications Radio Mast (30m tall) ── -->
+    <model name="comm_mast">
+      <static>true</static>
+      <pose>-20 -55 15.0 0 0 0</pose>
+      <link name="mast_link">
+        <collision name="mast_col">
+          <geometry>
+            <cylinder>
+              <radius>0.8</radius>
+              <length>30.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="mast_vis">
+          <geometry>
+            <cylinder>
+              <radius>0.8</radius>
+              <length>30.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.9 0.2 0.2 1</ambient>
+            <diffuse>0.9 0.2 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Obstacle 4: Left Flight Path Pylon 1 (25m tall, at East = -30m) ── -->
+    <model name="pylon_1">
+      <static>true</static>
+      <pose>0 -30 12.5 0 0 0</pose>
+      <link name="pylon_link">
+        <collision name="col">
+          <geometry>
+            <cylinder>
+              <radius>1.5</radius>
+              <length>25.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <cylinder>
+              <radius>1.5</radius>
+              <length>25.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.9 0.6 0.1 1</ambient>
+            <diffuse>0.95 0.65 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Obstacle 5: Left Flight Path Pylon 2 (25m tall, at East = -70m) ── -->
+    <model name="pylon_2">
+      <static>true</static>
+      <pose>10 -70 12.5 0 0 0</pose>
+      <link name="pylon_link">
+        <collision name="col">
+          <geometry>
+            <cylinder>
+              <radius>1.5</radius>
+              <length>25.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <cylinder>
+              <radius>1.5</radius>
+              <length>25.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.9 0.6 0.1 1</ambient>
+            <diffuse>0.95 0.65 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Obstacle 6: Left Flight Path Target Marker (Destination Tower at East = -100m) ── -->
+    <model name="target_marker_tower">
+      <static>true</static>
+      <pose>0 -100 20.0 0 0 0</pose>
+      <link name="target_tower_link">
+        <collision name="col">
+          <geometry>
+            <cylinder>
+              <radius>2.0</radius>
+              <length>40.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <cylinder>
+              <radius>2.0</radius>
+              <length>40.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.8 0.3 1</ambient>
+            <diffuse>0.1 0.85 0.3 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Stacked Cargo Containers Obstacle ── -->
+    <model name="cargo_container_1">
+      <static>true</static>
+      <pose>-15 15 1.5 0 0 0.3</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>12.0 2.5 3.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>12.0 2.5 3.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.1 0.1 1</ambient>
+            <diffuse>0.85 0.15 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="cargo_container_2">
+      <static>true</static>
+      <pose>-15 18 1.5 0 0 0.3</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>12.0 2.5 3.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>12.0 2.5 3.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.1 0.3 0.8 1</ambient>
+            <diffuse>0.15 0.35 0.85 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── GPS Coordinates (Bangalore Garuda HQ) ── -->
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>12.9716</latitude_deg>
+      <longitude_deg>77.5946</longitude_deg>
+      <elevation>920.0</elevation>
+    </spherical_coordinates>
+  </world>
+</sdf>

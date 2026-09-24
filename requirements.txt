@@ -9,7 +9,7 @@ pyyaml>=6.0.1
 asyncio-mqtt>=0.16.2          # async utilities
 
 # --- Flight Controller (PX4 OFFBOARD via MAVLink) ---
-mavsdk>=2.1.0                 # PX4 official async Python SDK
+mavsdk>=2.1.0,<4.0.0          # PX4 official async Python SDK (v3.x gRPC API)
 pymavlink>=2.4.41             # Low-level MAVLink fallback
 
 # --- Computer Vision ---

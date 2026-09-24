@@ -1,0 +1,4 @@
+# Disaster Response Command Center — backend dependencies
+# (frontend uses Tailwind / Chart.js / Leaflet via CDN, no build step)
+fastapi>=0.110
+uvicorn[standard]>=0.29

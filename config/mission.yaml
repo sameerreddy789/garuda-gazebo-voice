@@ -5,17 +5,17 @@
 # --- General Flight ---
 flight:
   default_takeoff_altitude_m: 3.0
-  max_altitude_m: 30.0
+  max_altitude_m: 150.0
   max_speed_ms: 10.0            # 10 m/s = 36 km/h
   cruise_speed_ms: 5.0
-  rtl_altitude_m: 15.0
+  rtl_altitude_m: 20.0
   rtl_speed_ms: 3.0
 
 # --- Geofence ---
 geofence:
   enabled: true
-  max_radius_m: 100.0           # Max horizontal distance from home
-  max_altitude_m: 30.0
+  max_radius_m: 250.0           # Max horizontal distance from home
+  max_altitude_m: 150.0
   action: "rtl"                 # Action on breach: rtl, land, hover
 
 # --- Subject Tracking ---

@@ -1,6 +1,6 @@
 # GarudaOne DroneOS
 
-**Autonomous AI-Powered Cinematography Drone — Companion Computer Software**
+## Autonomous AI-Powered Cinematography Drone — Companion Computer Software
 
 > "Throw it in the air, say 'Follow me', get DJI-level cinematic footage."
 
@@ -8,7 +8,7 @@
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
 │  LAYER 1: Cognitive Brain (RPi5)                  │
 │  LFM-2.5-230M → Complex command understanding     │
@@ -35,7 +35,7 @@
 ## Hardware
 
 | Component | Model |
-|-----------|-------|
+| --- | --- |
 | Companion Computer | Raspberry Pi 5 (8GB) |
 | Flight Controller | MicoAir H743 AIO 35A |
 | Camera | Skydroid C10 Pro 3-axis gimbal |
@@ -49,25 +49,30 @@
 ## Quick Start
 
 ### 1. Setup (on RPi5)
+
 ```bash
 chmod +x scripts/setup_rpi5.sh
 ./scripts/setup_rpi5.sh
 ```
 
 ### 2. Download AI Models
+
 ```bash
 python scripts/download_models.py
 ```
 
 ### 3. Flash PX4 (if still on Betaflight)
+
 See [scripts/flash_px4.md](scripts/flash_px4.md)
 
 ### 4. Run
+
 ```bash
 make run
 ```
 
 ### Development (on any machine)
+
 ```bash
 pip install -r requirements.txt
 GARUDA_MODE=simulation make run   # Runs completely offline using Telemetry Stub Fallback
@@ -81,6 +86,7 @@ inside WSL2 on Windows. This runs the **exact same PX4 firmware** as the real
 MicoAir H743 flight controller.
 
 ### Quick Start (Windows + WSL2)
+
 ```bash
 # 1. Setup PX4 SITL in WSL2 (one-time, ~30 minutes)
 wsl bash scripts/setup_sitl.sh
@@ -93,6 +99,7 @@ make run-sitl
 ```
 
 ### What You Get
+
 - 🚁 **Real PX4 firmware** with actual flight physics
 - 🎥 **3D visualization** via Gazebo and QGroundControl
 - 🔄 **Same code** for simulation and real hardware (change one config line)
@@ -101,8 +108,9 @@ make run-sitl
 See [`docs/sitl_setup_guide.md`](docs/sitl_setup_guide.md) for the complete guide.
 
 ### Connection Modes
+
 | Mode | How to Enable | Behavior |
-|------|---------------|----------|
+| --- | --- | --- |
 | **SITL** | `GARUDA_MODE=simulation` + PX4 SITL running | Real PX4 flight dynamics |
 | **Stub** | `GARUDA_MODE=simulation` (no SITL running) | Fake telemetry for logic testing |
 | **Hardware** | (default, no env var) | UART connection to real flight controller |
@@ -110,7 +118,7 @@ See [`docs/sitl_setup_guide.md`](docs/sitl_setup_guide.md) for the complete guid
 ## Voice Commands
 
 | Say | Action |
-|-----|--------|
+| --- | --- |
 | "Garuda, take off" | Take off to 3m altitude |
 | "Follow me" | Active subject tracking |
 | "Orbit" | Circle around subject (8m radius) |
@@ -123,7 +131,7 @@ See [`docs/sitl_setup_guide.md`](docs/sitl_setup_guide.md) for the complete guid
 
 ## Project Structure
 
-```
+```text
 garuda/
 ├── main.py              # Entry point + boot sequence
 ├── core/                # Mission orchestrator + event bus

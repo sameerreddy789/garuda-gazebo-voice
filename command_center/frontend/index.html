@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GarudaOne — Disaster Response Command Center</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230ea5e9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6l-7-3Z'/></svg>" />
+
+  <!-- Tailwind (Play CDN — prototype/hackathon use) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1' },
+          },
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        },
+      },
+    };
+  </script>
+
+  <!-- Chart.js + Leaflet (analytics + map) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased">
+
+  <!-- ============================ LOGIN ============================ -->
+  <div id="login-view" class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+    <div class="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-sky-950"></div>
+    <div class="absolute inset-0 opacity-20" style="background-image:radial-gradient(circle at 20% 30%, #0ea5e9 0, transparent 40%), radial-gradient(circle at 80% 70%, #f43f5e 0, transparent 40%);"></div>
+
+    <div class="relative w-full max-w-md">
+      <div class="bg-white/95 dark:bg-slate-900/90 backdrop-blur rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 p-8">
+        <div class="flex items-center gap-3 mb-1">
+          <div id="login-logo" class="h-11 w-11 rounded-xl bg-brand-600 text-white grid place-items-center"></div>
+          <div>
+            <h1 class="text-lg font-extrabold leading-tight text-slate-900 dark:text-white">GarudaOne</h1>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Disaster Response Command Center</p>
+          </div>
+        </div>
+        <p class="text-sm text-slate-600 dark:text-slate-400 mt-3 mb-6">Secure operator access — National Disaster Response Force</p>
+
+        <form id="login-form" class="space-y-4">
+          <div>
+            <label for="username" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Username</label>
+            <input id="username" name="username" type="text" value="commander" required autocomplete="username"
+              class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" />
+          </div>
+          <div>
+            <label for="password" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Password</label>
+            <input id="password" name="password" type="password" value="rescue2026" required autocomplete="current-password"
+              class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" />
+          </div>
+          <div>
+            <label for="role" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Role</label>
+            <select id="role" name="role"
+              class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none cursor-pointer">
+              <option value="Commander">Commander</option>
+              <option value="Operator">Operator</option>
+              <option value="Observer">Observer</option>
+            </select>
+          </div>
+          <div class="flex items-center justify-between text-sm">
+            <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input id="remember" type="checkbox" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer" />
+              <span class="text-slate-600 dark:text-slate-400">Remember me</span>
+            </label>
+            <a href="#" class="text-brand-600 dark:text-brand-500 hover:underline">Forgot password?</a>
+          </div>
+          <button type="submit"
+            class="w-full rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 transition-colors duration-200 cursor-pointer">
+            Sign in to Command Center
+          </button>
+          <p id="login-error" class="text-sm text-rose-500 hidden text-center"></p>
+        </form>
+      </div>
+      <p class="text-center text-xs text-slate-400 mt-4">Demo credentials pre-filled · mock authentication</p>
+    </div>
+  </div>
+
+  <!-- ============================ APP ============================ -->
+  <div id="app-view" class="hidden min-h-screen">
+    <!-- Sidebar -->
+    <aside id="sidebar"
+      class="fixed z-40 inset-y-0 left-0 w-60 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10 flex flex-col -translate-x-full lg:translate-x-0 transition-transform duration-200">
+      <div class="h-16 flex items-center gap-2.5 px-5 border-b border-slate-200 dark:border-white/10">
+        <div id="side-logo" class="h-8 w-8 rounded-lg bg-brand-600 text-white grid place-items-center"></div>
+        <div class="leading-tight">
+          <div class="font-extrabold text-sm">GarudaOne</div>
+          <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Command Center</div>
+        </div>
+      </div>
+      <nav id="nav" class="flex-1 overflow-y-auto py-3 px-2 space-y-1"></nav>
+      <div class="p-3 border-t border-slate-200 dark:border-white/10">
+        <div id="swarm-link" class="text-[11px] text-slate-500 dark:text-slate-400 px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/60"></div>
+      </div>
+    </aside>
+    <div id="sidebar-backdrop" class="fixed inset-0 bg-black/40 z-30 hidden lg:hidden"></div>
+
+    <!-- Main -->
+    <div class="lg:pl-60 min-h-screen flex flex-col">
+      <!-- Topbar -->
+      <header class="sticky top-0 z-20 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-white/10 flex items-center gap-3 px-4">
+        <button id="menu-btn" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" aria-label="Menu"></button>
+        <h2 id="panel-title" class="text-base sm:text-lg font-bold">Dashboard</h2>
+
+        <div class="ml-auto flex items-center gap-2 sm:gap-3">
+          <div id="ws-status" class="hidden sm:flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800">
+            <span class="h-2 w-2 rounded-full bg-slate-400"></span><span>Connecting</span>
+          </div>
+          <div id="severity-badge" class="hidden sm:block"></div>
+          <div id="weather-chip" class="hidden md:flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300"></div>
+          <div id="clock" class="hidden sm:block text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200"></div>
+          <button id="notif-btn" class="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" aria-label="Notifications">
+            <span id="notif-dot" class="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 hidden"></span>
+          </button>
+          <button id="theme-btn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" aria-label="Toggle theme"></button>
+          <button id="fs-btn" class="hidden sm:block p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" aria-label="Fullscreen"></button>
+          <div class="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-white/10">
+            <div class="text-right hidden sm:block leading-tight">
+              <div id="user-name" class="text-sm font-semibold"></div>
+              <div id="user-role" class="text-[10px] text-slate-500 dark:text-slate-400 uppercase"></div>
+            </div>
+            <button id="logout-btn" class="p-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-500 cursor-pointer" aria-label="Logout"></button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Panels -->
+      <main id="content" class="flex-1 p-4 sm:p-6 max-w-[1600px] w-full mx-auto"></main>
+    </div>
+  </div>
+
+  <!-- Notification drawer -->
+  <div id="notif-drawer" class="fixed top-16 right-4 z-50 w-80 max-w-[92vw] hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-200 dark:border-white/10 font-semibold text-sm flex items-center justify-between">
+        <span>Notifications</span><span id="notif-count" class="text-xs text-slate-400"></span>
+      </div>
+      <div id="notif-list" class="max-h-96 overflow-y-auto divide-y divide-slate-100 dark:divide-white/5"></div>
+    </div>
+  </div>
+
+  <!-- Modal host -->
+  <div id="modal-root"></div>
+
+  <!-- Toast host -->
+  <div id="toast-root" class="fixed bottom-4 right-4 z-[60] space-y-2"></div>
+
+  <script src="/js/icons.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
