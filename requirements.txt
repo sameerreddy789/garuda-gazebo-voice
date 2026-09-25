@@ -32,6 +32,7 @@ numpy>=1.26.0                 # Array operations
 # --- Utilities ---
 scipy>=1.12.0                 # B-spline interpolation, spatial transforms
 pyserial>=3.5                 # UART serial communication
+rich>=13.7.0                  # Cyberpunk terminal dashboard HUD
 
 # --- Development ---
 pytest>=8.0.0

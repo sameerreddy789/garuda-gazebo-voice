@@ -1,0 +1,142 @@
+{
+  "timestamp": 1790365605.273,
+  "sim_time_s": 1.9,
+  "flight_phase": "RTL",
+  "telemetry": {
+    "altitude_agl_m": 15.0,
+    "altitude_asl_m": 935.0,
+    "airspeed_ms": 5.0,
+    "heading_deg": 45.0,
+    "latitude": 12.9716,
+    "longitude": 77.5946,
+    "distance_to_target_m": 250.0,
+    "distance_to_home_m": 30.5
+  },
+  "environment": {
+    "altitude_agl_m": 15.0,
+    "altitude_asl_m": 935.0,
+    "air_density_kg_m3": 1.1188,
+    "temperature_C": 8.92,
+    "pressure_hpa": 905.85,
+    "wind_vector_ms": [
+      -0.33,
+      11.26,
+      0.04
+    ],
+    "wind_speed_ms": 11.27,
+    "wind_heading_deg": 91.7,
+    "turbulence_intensity": 0.2,
+    "temp_offset_C": 0.0
+  },
+  "vehicle_health": {
+    "total_mass_kg": 0.249,
+    "payload_kg": 0.0,
+    "battery": {
+      "soc_percent": 99.7,
+      "voltage_v": 12.39,
+      "temperature_C": 25.0,
+      "is_warning": false,
+      "is_critical": false
+    },
+    "rotor_efficiencies": [
+      0.9,
+      0.9,
+      0.9,
+      0.9
+    ],
+    "avg_rotor_efficiency": 0.9,
+    "min_rotor_efficiency": 0.9,
+    "rotor_imbalance_delta": 0.0,
+    "structural_stress": 0.3
+  },
+  "energy": {
+    "current_power_w": 32.0,
+    "current_draw_A": 2.58,
+    "remaining_endurance_s": 624.7,
+    "remaining_endurance_min": 10.4,
+    "safe_envelope": {
+      "hover_power_w": 36.2,
+      "cruise_power_5ms_w": 32.0,
+      "max_safe_airspeed_ms": 9.0,
+      "max_safe_altitude_m": 120.0,
+      "max_range_m": 3123.6,
+      "hover_endurance_s": 552.5,
+      "hover_endurance_min": 9.2
+    }
+  },
+  "uncertainty": {
+    "altitude": {
+      "estimate_m": 15.01,
+      "uncertainty_m": 0.12,
+      "ci_95": [
+        14.78,
+        15.24
+      ]
+    },
+    "airspeed": {
+      "estimate_ms": 5.01,
+      "uncertainty_ms": 0.21
+    },
+    "wind_speed": {
+      "estimate_ms": 11.27,
+      "uncertainty_ms": 0.83
+    },
+    "battery_soc": {
+      "estimate_percent": 99.7,
+      "uncertainty_percent": 0.2,
+      "ci_95": [
+        99.4,
+        100.0
+      ]
+    },
+    "endurance": {
+      "estimate_s": 624.7,
+      "estimate_min": 10.4,
+      "uncertainty_min": 0.2,
+      "ci_95_min": [
+        10.1,
+        10.7
+      ]
+    }
+  },
+  "decision": {
+    "timestamp": 1790365605.27,
+    "decision": "RETURN_TO_BASE",
+    "confidence": 0.92,
+    "triggers": [
+      {
+        "parameter": "sustained_wind_speed_ms",
+        "value": 11.26603381460763,
+        "threshold": 8.5,
+        "severity": "WARNING",
+        "description": "Wind speed (11.3 m/s) exceeds maximum safe operational limit."
+      }
+    ],
+    "reason": "Vehicle health degradation or energy reserve constraints mandate immediate Return to Launch.",
+    "alternatives_considered": [
+      "REDUCE_SPEED",
+      "ALTER_ALTITUDE"
+    ],
+    "physics_snapshot": {
+      "altitude_agl_m": 15.0,
+      "air_density_kg_m3": 1.1188,
+      "wind_speed_ms": 11.27,
+      "wind_vector_ms": [
+        -0.33,
+        11.26,
+        0.04
+      ],
+      "battery_temp_C": 25.0,
+      "battery_soc_percent": 99.7,
+      "hover_power_w": 36.2,
+      "remaining_endurance_min": 9.2,
+      "rotor_efficiencies": [
+        0.9,
+        0.9,
+        0.9,
+        0.9
+      ],
+      "rotor_imbalance_delta": 0.0
+    }
+  }
+}

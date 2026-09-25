@@ -28,7 +28,6 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from garuda.flight.swarm_manager import DroneAgent
 from garuda.flight.vision_injector import (
     LoopbackPoseSource,
     VisionInjector,
@@ -36,6 +35,7 @@ from garuda.flight.vision_injector import (
 )
 from garuda.utils.logger import get_logger
 
+from mavsdk import System
 from mavsdk.offboard import OffboardError, PositionNedYaw
 
 log = get_logger("gps_denied")
@@ -136,17 +136,19 @@ async def arm_with_retry(drone, attempts: int = 4) -> bool:
 
 async def run(args) -> int:
     url = f"udpin://{args.host}:{args.port}"
-    agent = DroneAgent(
-        system_id=0,
-        udp_port=args.port,
-        connection_url=url,
-        grpc_port=args.grpc_port,
-        connection_timeout_s=args.connect_timeout,
-    )
-    if not await agent.connect():
-        log.error("initial connect failed")
+    drone = System(mavsdk_server_address="localhost", port=args.grpc_port)
+    log.info(f"Connecting to PX4 on {url} (gRPC port {args.grpc_port}) ...")
+    try:
+        await drone.connect(system_address=url)
+        async def _await_heartbeat():
+            async for state in drone.core.connection_state():
+                if state.is_connected:
+                    return True
+            return False
+        await asyncio.wait_for(_await_heartbeat(), timeout=args.connect_timeout)
+    except Exception as e:
+        log.error(f"initial connect failed: {e}")
         return 1
-    drone = agent.drone
 
     # Start vision injection FIRST, while GPS still provides a valid position,
     # so external-vision data is already flowing when we flip EKF2 over to it.
