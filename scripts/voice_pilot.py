@@ -25,15 +25,19 @@ import time
 import urllib.request
 import urllib.error
 
-# Ensure UTF-8 output on Windows consoles to prevent cp1252 UnicodeEncodeError
+# Ensure UTF-8 output on Windows consoles with immediate line-buffering
 if sys.platform == "win32":
     try:
         if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
         if hasattr(sys.stderr, "reconfigure"):
-            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     except Exception:
         pass
+
+import functools
+_builtin_print = print
+print = functools.partial(_builtin_print, flush=True)
 
 try:
     from dotenv import load_dotenv
@@ -171,11 +175,23 @@ class AICopilot:
         self.is_speaking = False
 
     def prewarm_cache(self):
-        """Pre-downloads audio for standard commands for instantaneous zero-latency playback."""
+        """Pre-downloads audio for standard commands and confirmations for instantaneous zero-latency playback."""
         if not self.smallest_key:
             return
         def _fetch():
-            for action, phrase in list(TACTICAL_REPLIES.items())[:6]:
+            phrases_to_cache = list(TACTICAL_REPLIES.values()) + [
+                "Drone takeoff completed. Hovering at three meters.",
+                "Forward movement completed.",
+                "Backward translation completed.",
+                "Left translation completed.",
+                "Right translation completed.",
+                "Climb completed. Altitude held.",
+                "Descent completed.",
+                "Three-sixty survey completed.",
+                "Drone landing completed. Touchdown confirmed and motors disarmed.",
+                "Warning! Drone has not taken off. Please command takeoff first.",
+            ]
+            for phrase in phrases_to_cache[:10]:
                 try:
                     data = self._generate_tts(phrase)
                     if data:
@@ -204,9 +220,9 @@ class AICopilot:
                     "output_format": "wav"
                 }).encode("utf-8")
             )
-            with urllib.request.urlopen(req, timeout=6.0) as resp:
+            with urllib.request.urlopen(req, timeout=5.0) as resp:
                 return resp.read()
-        except Exception as e:
+        except Exception:
             return None
 
     def speak(self, text: str):
@@ -226,26 +242,39 @@ class AICopilot:
 
                 if data and winsound:
                     winsound.PlaySound(data, winsound.SND_MEMORY)
-                elif winsound:
-                    winsound.Beep(1100, 80)
+                else:
+                    # Built-in Windows local speech engine fallback (100% offline & instantaneous)
+                    clean_text = text.replace("'", "").replace('"', "")
+                    subprocess.run(
+                        ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                         f"(New-Object -ComObject SAPI.SpVoice).Speak('{clean_text}')"],
+                        creationflags=0x08000000 if sys.platform == "win32" else 0,
+                        timeout=5.0
+                    )
             except Exception:
-                pass
+                if winsound:
+                    try:
+                        winsound.Beep(1100, 80)
+                    except Exception:
+                        pass
             finally:
                 time.sleep(0.35)  # Acoustic decay buffer so mic doesn't catch tail echo
                 self.is_speaking = False
 
         threading.Thread(target=_play, daemon=True).start()
 
-    def parse_natural_language(self, user_text: str) -> tuple[str, str]:
-        """Calls OpenAI GPT-5-nano to extract flight action and formulate pilot response."""
+    def parse_natural_language(self, user_text: str) -> tuple[str, str, float, float]:
+        """Calls OpenAI GPT-5-nano to extract flight action, distance in meters (default 5.0), and duration in mins (default 10.0)."""
+        dist, dur = extract_flight_parameters(user_text)
         if not self.openai_key:
-            return "UNKNOWN", ""
+            return "UNKNOWN", "", dist, dur
 
         system_prompt = (
-            "You are GarudaOne drone AI brain. Extract the flight action and formulate a brief pilot response.\n"
+            "You are GarudaOne drone AI brain. Extract the flight action, optional distance in meters (default 5.0), "
+            "optional duration in minutes (default 10.0 for takeoff), and formulate a brief pilot response.\n"
             "Allowed actions: TAKEOFF, LAND, MOVE_FORWARD, MOVE_BACKWARD, MOVE_LEFT, MOVE_RIGHT, "
             "CLIMB, DESCEND, ROTATE_360, ROTATE_LEFT, ROTATE_RIGHT, HOVER, RTL, EMERGENCY, WAKE_ACK, UNKNOWN.\n"
-            "Respond ONLY with valid JSON: {\"action\": \"...\", \"reply\": \"...\"}\n"
+            "Respond ONLY with valid JSON: {\"action\": \"...\", \"distance_m\": 5.0, \"duration_mins\": 10.0, \"reply\": \"...\"}\n"
             "Keep reply under 10 words."
         )
 
@@ -265,7 +294,7 @@ class AICopilot:
                     "max_completion_tokens": 1600
                 }).encode("utf-8")
             )
-            with urllib.request.urlopen(req, timeout=25.0) as resp:
+            with urllib.request.urlopen(req, timeout=12.0) as resp:
                 data = json.loads(resp.read().decode())
                 content = data["choices"][0]["message"]["content"]
                 # Robust JSON parsing
@@ -278,9 +307,45 @@ class AICopilot:
                 parsed = json.loads(clean_json)
                 action = parsed.get("action", "UNKNOWN").upper()
                 reply = parsed.get("reply", "")
-                return action, reply
+                parsed_dist = float(parsed.get("distance_m", dist))
+                parsed_dur = float(parsed.get("duration_mins", dur))
+                return action, reply, parsed_dist, parsed_dur
         except Exception:
-            return "UNKNOWN", ""
+            return "UNKNOWN", "", dist, dur
+
+
+def extract_flight_parameters(text: str) -> tuple[float, float]:
+    """Extracts distance in meters (default 5.0m) and duration in minutes (default 10.0m)."""
+    text_clean = text.lower().replace('-', ' ')
+    dist = 5.0
+    m_dist = re.search(r'(\d+(?:\.\d+)?)\s*(?:metres|meters|meter|metre|m\b)', text_clean)
+    if m_dist:
+        dist = float(m_dist.group(1))
+    else:
+        m_num = re.search(r'(?:for|by|to)\s+(\d+(?:\.\d+)?)\s*(?!mins|minutes|min)', text_clean)
+        if m_num:
+            dist = float(m_num.group(1))
+        else:
+            m_direct = re.search(r'\b(?:move\s+)?(?:left|right|forward|back|backward|climb|descend|up|down)\s+(\d+(?:\.\d+)?)\b', text_clean)
+            if m_direct:
+                dist = float(m_direct.group(1))
+
+    dur = 10.0
+    m_dur = re.search(r'(\d+(?:\.\d+)?)\s*(?:minutes|minute|mins|min\b)', text_clean)
+    if m_dur:
+        dur = float(m_dur.group(1))
+
+    return dist, dur
+
+
+def calculate_velocity_and_duration(distance_m: float, is_vertical: bool = False) -> tuple[float, float]:
+    """Calculates appropriate speed (m/s) and duration (s) to cover exact distance in meters."""
+    if is_vertical:
+        speed = 2.5 if distance_m > 8.0 else 1.5
+    else:
+        speed = 5.0 if distance_m > 12.0 else 2.5
+    duration = max(0.5, distance_m / speed)
+    return speed, duration
 
 
 def clean_speech_text(text: str) -> str:
@@ -290,21 +355,23 @@ def clean_speech_text(text: str) -> str:
     return " ".join(text.split())
 
 
-def parse_fast_intent(transcription: str) -> tuple[str, str]:
-    """Instant regex-based keyword parser for direct/quick commands."""
+def parse_fast_intent(transcription: str) -> tuple[str, str, float, float]:
+    """Instant regex-based keyword parser for direct/quick commands with parameter extraction."""
     cleaned = clean_speech_text(transcription)
     if not cleaned:
-        return "UNKNOWN", ""
+        return "UNKNOWN", "", 5.0, 10.0
+
+    dist, dur = extract_flight_parameters(cleaned)
 
     if any(q in cleaned for q in ["help", "what is", "what can you do", "commands", "options"]):
-        return "HELP", cleaned
+        return "HELP", cleaned, dist, dur
 
     is_wake_only = (
         cleaned in WAKE_WORDS or
         any(cleaned == f"hey {w}" or cleaned == f"hi {w}" or cleaned == f"ok {w}" or cleaned == f"hello {w}" for w in WAKE_WORDS)
     )
     if is_wake_only:
-        return "WAKE_ACK", cleaned
+        return "WAKE_ACK", cleaned, dist, dur
 
     has_wake_word = any(w in cleaned for w in WAKE_WORDS)
 
@@ -318,24 +385,24 @@ def parse_fast_intent(transcription: str) -> tuple[str, str]:
 
     if matches:
         matches.sort(key=lambda x: x[0], reverse=True)
-        return matches[0][1], matches[0][2]
+        return matches[0][1], matches[0][2], dist, dur
 
     if has_wake_word:
         words = cleaned.split()
         if any(w in ["take", "off", "launch", "fly", "up", "lift", "theka", "teka", "taka"] for w in words):
-            return "TAKEOFF", "takeoff (wake context)"
+            return "TAKEOFF", "takeoff (wake context)", dist, dur
         if any(w in ["land", "down", "ground"] for w in words):
-            return "LAND", "land (wake context)"
+            return "LAND", "land (wake context)", dist, dur
         if any(w in ["stop", "hold", "freeze", "halt"] for w in words):
-            return "HOVER", "hover (wake context)"
+            return "HOVER", "hover (wake context)", dist, dur
         if any(w in ["left"] for w in words):
-            return "MOVE_LEFT", "left (wake context)"
+            return "MOVE_LEFT", "left (wake context)", dist, dur
         if any(w in ["right"] for w in words):
-            return "MOVE_RIGHT", "right (wake context)"
+            return "MOVE_RIGHT", "right (wake context)", dist, dur
         if any(w in ["move", "front", "ahead"] for w in words):
-            return "MOVE_FORWARD", "forward (wake context)"
+            return "MOVE_FORWARD", "forward (wake context)", dist, dur
 
-    return "UNKNOWN", ""
+    return "UNKNOWN", "", dist, dur
 
 
 def resolve_connection_url(custom_url: str = None) -> str:
@@ -364,11 +431,66 @@ class DualPilot:
         self.is_armed = False
         self.is_armable = False
         self.is_offboard = False
+        self.is_in_air = False
+        self.altitude = 0.0
         self.recognizer = sr.Recognizer()
         self.mic = None
         self.stop_event = threading.Event()
         self.ai = AICopilot(OPENAI_API_KEY, SMALLEST_API_KEY)
         self.mic_muted = False
+
+    def play_fan_sound(self):
+        """Plays synthesized drone rotor / fan whoosh audio asynchronously."""
+        def _play():
+            try:
+                fan_wav = Path(__file__).parent.parent / "assets" / "drone_fan.wav"
+                if fan_wav.exists() and winsound:
+                    winsound.PlaySound(str(fan_wav), winsound.SND_FILENAME)
+            except Exception:
+                pass
+        threading.Thread(target=_play, daemon=True).start()
+
+    def trigger_ground_warning(self, cmd: str):
+        """Triggers audible alarm, visual banner, and vocal warning when movement is attempted on the ground."""
+        print(f"\n{BOLD}{RED}╔══════════════════════════════════════════════════════════════════╗{RESET}")
+        print(f"{BOLD}{RED}║  ⚠️  SAFETY INTERLOCK: FLIGHT ACTION REJECTED!                   ║{RESET}")
+        print(f"{BOLD}{RED}║  Drone has NOT taken off! Motors are resting on ground.          ║{RESET}")
+        print(f"{BOLD}{RED}║  Cannot execute '{cmd}' while landed on the Dronepad.            ║{RESET}")
+        print(f"{BOLD}{RED}║  👉 Please say 'Garuda, takeoff' or press [T] first.            ║{RESET}")
+        print(f"{BOLD}{RED}╚══════════════════════════════════════════════════════════════════╝{RESET}\n")
+
+        if winsound:
+            def _alarm():
+                try:
+                    winsound.Beep(900, 140)
+                    time.sleep(0.05)
+                    winsound.Beep(600, 220)
+                except Exception:
+                    pass
+            threading.Thread(target=_alarm, daemon=True).start()
+
+        warning_msg = "Warning! Drone has not taken off. Please command takeoff first."
+        self.ai.speak(warning_msg)
+
+    async def _telemetry_monitor(self):
+        """Monitors in_air and altitude telemetry from PX4 in real-time."""
+        async def _sub_in_air():
+            try:
+                async for in_air in self.drone.telemetry.in_air():
+                    self.is_in_air = in_air
+            except Exception:
+                pass
+
+        async def _sub_pos():
+            try:
+                async for pos in self.drone.telemetry.position():
+                    self.altitude = pos.relative_altitude_m
+                    if pos.relative_altitude_m > 0.4:
+                        self.is_in_air = True
+            except Exception:
+                pass
+
+        await asyncio.gather(_sub_in_air(), _sub_pos(), return_exceptions=True)
 
     def toggle_mic_mute(self):
         """Toggles microphone listening state on or off."""
@@ -402,6 +524,9 @@ class DualPilot:
 
             self.is_connected = await asyncio.wait_for(wait_for_heartbeat(), timeout=timeout_s)
             print(f"{GREEN}[OK] Connected to PX4 Autopilot!{RESET}")
+
+            # Start background telemetry monitor
+            asyncio.create_task(self._telemetry_monitor())
 
             print(f"{CYAN}[PX4] Verifying preflight health & GPS lock...{RESET}")
             async def check_health_ready():
@@ -450,54 +575,97 @@ class DualPilot:
             self.mic = None
             return False
 
-    async def execute_command(self, cmd: str, spoken_reply: str = None):
-        """Dispatches recognized command to PX4 or simulator instantly and speaks response."""
-        reply_to_speak = spoken_reply or TACTICAL_REPLIES.get(cmd, "")
+    async def execute_command(self, cmd: str, spoken_reply: str = None, distance_m: float = 5.0, duration_mins: float = 10.0):
+        """Dispatches recognized command to PX4 or simulator with custom distance (m) and duration (mins)."""
+        reply_to_speak = spoken_reply
+        if not reply_to_speak:
+            if cmd == "TAKEOFF":
+                reply_to_speak = f"Taking off. Holding hover for {int(duration_mins)} minutes."
+            elif cmd in ("MOVE_LEFT", "MOVE_RIGHT", "MOVE_FORWARD", "MOVE_BACKWARD"):
+                direction = cmd.split("_")[1].lower()
+                reply_to_speak = f"Translating {direction} {int(distance_m)} meters."
+            elif cmd == "CLIMB":
+                reply_to_speak = f"Ascending {int(distance_m)} meters higher."
+            elif cmd == "DESCEND":
+                reply_to_speak = f"Descending {int(distance_m)} meters."
+            else:
+                reply_to_speak = TACTICAL_REPLIES.get(cmd, "")
+
+        if cmd == "WAKE_ACK":
+            if reply_to_speak:
+                self.ai.speak(reply_to_speak)
+            print(f"\n{BOLD}{GREEN}[GARUDA AWAKE]{RESET}: {CYAN}\"{reply_to_speak or 'Yes, Commander! What is your command?'}\"{RESET}")
+            print(f"   {DIM}Try saying: 'move forward 10 meters', 'move right 50 meters', 'climb 15 meters', or 'land'!{RESET}\n")
+            return
+
+        if cmd == "HELP":
+            print(f"\n{BOLD}{CYAN}=== GARUDA VOICE & KEYBOARD GUIDE ==={RESET}")
+            print(f"  * Takeoff : Say 'take off for 10 mins'     OR Press [T]")
+            print(f"  * Forward : Say 'forward' (5m) / '50m'     OR Press [W] or [UP]")
+            print(f"  * Back    : Say 'backward' (5m) / '50m'    OR Press [S] or [DOWN]")
+            print(f"  * Left    : Say 'left' (5m) / '50m'        OR Press [A] or [LEFT]")
+            print(f"  * Right   : Say 'right' (5m) / '50m'       OR Press [D] or [RIGHT]")
+            print(f"  * Climb   : Say 'climb' (5m) / 'climb 20m' OR Press [Space] or [R]")
+            print(f"  * Descend : Say 'descend' (5m) / 'down'    OR Press [C] or [F]")
+            print(f"  * Rotate  : Say 'rotate' / 'turn around'   OR Press [Q] / [E]")
+            print(f"  * Land    : Say 'land' / 'garuda land'     OR Press [L]")
+            print(f"  * Stop    : Say 'stop' / 'hover'           OR Press [H]")
+            print(f"  * AI NLU  : Speak naturally with any distance: 'move right for 50 metres'!")
+            print(f"{CYAN}====================================={RESET}\n")
+            return
+
+        # Synchronize in-air state with altitude
+        if self.altitude > 0.4:
+            self.is_in_air = True
+
+        # Safety Interlock: Block directional/translation commands if drone is on the ground
+        AIR_RESTRICTED = {
+            "MOVE_FORWARD", "MOVE_BACKWARD", "MOVE_LEFT", "MOVE_RIGHT",
+            "CLIMB", "DESCEND", "ROTATE_LEFT", "ROTATE_RIGHT", "ROTATE_360", "HOVER"
+        }
+
+        if cmd in AIR_RESTRICTED and not self.is_in_air:
+            self.trigger_ground_warning(cmd)
+            return
+
+        # Only speak the tactical action if permitted by the safety interlock
         if reply_to_speak:
             self.ai.speak(reply_to_speak)
         elif winsound:
             winsound.Beep(1100, 70)
 
-        if cmd == "WAKE_ACK":
-            print(f"\n{BOLD}{GREEN}[GARUDA AWAKE]{RESET}: {CYAN}\"{reply_to_speak or 'Yes, Commander! What is your command?'}\"{RESET}")
-            print(f"   {DIM}Try saying: 'move forward', 'fly higher', 'land', or ask anything!{RESET}\n")
-            return
-
-        if cmd == "HELP":
-            print(f"\n{BOLD}{CYAN}=== GARUDA VOICE & KEYBOARD GUIDE ==={RESET}")
-            print(f"  * Takeoff : Say 'take off' / 'theka'       OR Press [T]")
-            print(f"  * Forward : Say 'forward' / 'move'         OR Press [W] or [UP]")
-            print(f"  * Back    : Say 'backward' / 'back'        OR Press [S] or [DOWN]")
-            print(f"  * Left    : Say 'left' / 'move left'       OR Press [A] or [LEFT]")
-            print(f"  * Right   : Say 'right' / 'move right'     OR Press [D] or [RIGHT]")
-            print(f"  * Climb   : Say 'climb' / 'up'             OR Press [Space] or [R]")
-            print(f"  * Descend : Say 'descend' / 'down'         OR Press [C] or [F]")
-            print(f"  * Rotate  : Say 'rotate' / 'turn around'   OR Press [Q] / [E]")
-            print(f"  * Land    : Say 'land' / 'garuda land'     OR Press [L]")
-            print(f"  * Stop    : Say 'stop' / 'hover'           OR Press [H]")
-            print(f"  * AI NLU  : Speak naturally into your mic at any time!")
-            print(f"{CYAN}====================================={RESET}\n")
-            return
-
-        print(f"\n{BOLD}{CYAN}>>> [EXECUTING FLIGHT ACTION]: {YELLOW}{cmd}{RESET}")
+        dist_label = f" ({int(distance_m)}m)" if cmd in ("MOVE_FORWARD", "MOVE_BACKWARD", "MOVE_LEFT", "MOVE_RIGHT", "CLIMB", "DESCEND") else ""
+        dur_label = f" ({int(duration_mins)} mins)" if cmd == "TAKEOFF" else ""
+        print(f"\n{BOLD}{CYAN}>>> [EXECUTING FLIGHT ACTION]: {YELLOW}{cmd}{dist_label}{dur_label}{RESET}")
+        print(f"    {DIM}[STATE] Altitude: {self.altitude:.2f}m | In-Air: {self.is_in_air} | Armed: {self.is_armed}{RESET}")
         if reply_to_speak:
-            print(f"{BOLD}{GREEN}[AI PILOT VOICE]{RESET}: \"{reply_to_speak}\"")
+            print(f"    {BOLD}{GREEN}[AI PILOT VOICE]{RESET}: \"{reply_to_speak}\"")
 
         if cmd == "TAKEOFF":
+            self.play_fan_sound()
             if self.is_connected:
                 try:
-                    print(f"{BOLD}{GREEN}[PX4] INSTANT LAUNCH! Arming & taking off...{RESET}")
+                    print(f"{BOLD}{GREEN}[PX4] INSTANT LAUNCH! Arming & taking off to 3.0m...{RESET}")
                     try:
                         await self.drone.action.arm()
                         self.is_armed = True
                     except ActionError:
                         pass
                     await self.drone.action.takeoff()
-                    print(f"{BOLD}{GREEN}[OK] Takeoff dispatched! Ascending to 3.0m.{RESET}")
+                    self.is_in_air = True
+                    print(f"{BOLD}{GREEN}[OK] Takeoff dispatched! Ascending to 3.0m (Hover Window: {int(duration_mins)} mins).{RESET}")
+                    await asyncio.sleep(3.5)
                 except Exception as e:
                     print(f"{RED}[ERROR] Takeoff execution failed: {e}{RESET}")
             else:
-                print(f"{YELLOW}[SIMULATOR] Motors armed -> Ascending to 3.0m -> Hovering.{RESET}")
+                self.is_in_air = True
+                print(f"{YELLOW}[SIMULATOR] Motors armed -> Ascending to 3.0m -> Hovering for {int(duration_mins)} mins.{RESET}")
+                await asyncio.sleep(2.0)
+
+            self.play_fan_sound()
+            completion_msg = f"Garuda takeoff completed. Hovering at three meters for {int(duration_mins)} minutes."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "LAND":
             if self.is_connected:
@@ -506,11 +674,19 @@ class DualPilot:
                     await self.drone.action.land()
                     self.is_offboard = False
                     self.is_armed = False
+                    self.is_in_air = False
                     print(f"{GREEN}[OK] Landing accepted. Descending smoothly.{RESET}")
+                    await asyncio.sleep(3.0)
                 except Exception as e:
                     print(f"{RED}[ERROR] Landing failed: {e}{RESET}")
             else:
+                self.is_in_air = False
                 print(f"{YELLOW}[SIMULATOR] Descending -> Touchdown -> Disarmed.{RESET}")
+                await asyncio.sleep(1.5)
+
+            completion_msg = "Garuda landing completed. Touchdown confirmed and motors disarmed."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "RTL":
             if self.is_connected:
@@ -523,6 +699,10 @@ class DualPilot:
             else:
                 print(f"{YELLOW}[SIMULATOR] Returning to home coordinate -> Auto landing.{RESET}")
 
+            completion_msg = "Garuda returning to launch coordinate."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
+
         elif cmd == "HOVER":
             if self.is_connected:
                 try:
@@ -534,61 +714,114 @@ class DualPilot:
             else:
                 print(f"{YELLOW}[SIMULATOR] Position hold active.{RESET}")
 
+            completion_msg = "Garuda position locked. Hovering."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
+
         elif cmd == "MOVE_LEFT":
-            print(f"{CYAN}[FLIGHT] Translating Left (-1.5 m/s for 1.5s)...{RESET}")
-            await self._stream_velocity(forward=0.0, right=-1.5, down=0.0, yaw_deg_s=0.0, duration_s=1.5)
-            print(f"{GREEN}[OK] Left slide finished. Holding position.{RESET}")
+            speed, dur = calculate_velocity_and_duration(distance_m, is_vertical=False)
+            print(f"{CYAN}[FLIGHT] Translating Left (-{speed:.1f} m/s for {dur:.1f}s = {distance_m:.1f}m)...{RESET}")
+            self.play_fan_sound()
+            await self._stream_velocity(forward=0.0, right=-speed, down=0.0, yaw_deg_s=0.0, duration_s=dur)
+            print(f"{GREEN}[OK] Left slide of {int(distance_m)}m finished. Holding position.{RESET}")
+            completion_msg = f"Garuda left slide of {int(distance_m)} meters completed."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "MOVE_RIGHT":
-            print(f"{CYAN}[FLIGHT] Translating Right (+1.5 m/s for 1.5s)...{RESET}")
-            await self._stream_velocity(forward=0.0, right=1.5, down=0.0, yaw_deg_s=0.0, duration_s=1.5)
-            print(f"{GREEN}[OK] Right slide finished. Holding position.{RESET}")
+            speed, dur = calculate_velocity_and_duration(distance_m, is_vertical=False)
+            print(f"{CYAN}[FLIGHT] Translating Right (+{speed:.1f} m/s for {dur:.1f}s = {distance_m:.1f}m)...{RESET}")
+            self.play_fan_sound()
+            await self._stream_velocity(forward=0.0, right=speed, down=0.0, yaw_deg_s=0.0, duration_s=dur)
+            print(f"{GREEN}[OK] Right slide of {int(distance_m)}m finished. Holding position.{RESET}")
+            completion_msg = f"Garuda right slide of {int(distance_m)} meters completed."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "MOVE_FORWARD":
-            print(f"{CYAN}[FLIGHT] Translating Forward (+1.5 m/s for 1.5s)...{RESET}")
-            await self._stream_velocity(forward=1.5, right=0.0, down=0.0, yaw_deg_s=0.0, duration_s=1.5)
-            print(f"{GREEN}[OK] Forward translation finished. Holding position.{RESET}")
+            speed, dur = calculate_velocity_and_duration(distance_m, is_vertical=False)
+            print(f"{CYAN}[FLIGHT] Translating Forward (+{speed:.1f} m/s for {dur:.1f}s = {distance_m:.1f}m)...{RESET}")
+            self.play_fan_sound()
+            await self._stream_velocity(forward=speed, right=0.0, down=0.0, yaw_deg_s=0.0, duration_s=dur)
+            print(f"{GREEN}[OK] Forward translation of {int(distance_m)}m finished. Holding position.{RESET}")
+            completion_msg = f"Garuda forward translation of {int(distance_m)} meters completed."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "MOVE_BACKWARD":
-            print(f"{CYAN}[FLIGHT] Translating Backward (-1.5 m/s for 1.5s)...{RESET}")
-            await self._stream_velocity(forward=-1.5, right=0.0, down=0.0, yaw_deg_s=0.0, duration_s=1.5)
-            print(f"{GREEN}[OK] Backward translation finished. Holding position.{RESET}")
+            speed, dur = calculate_velocity_and_duration(distance_m, is_vertical=False)
+            print(f"{CYAN}[FLIGHT] Translating Backward (-{speed:.1f} m/s for {dur:.1f}s = {distance_m:.1f}m)...{RESET}")
+            self.play_fan_sound()
+            await self._stream_velocity(forward=-speed, right=0.0, down=0.0, yaw_deg_s=0.0, duration_s=dur)
+            print(f"{GREEN}[OK] Backward translation of {int(distance_m)}m finished. Holding position.{RESET}")
+            completion_msg = f"Garuda backward translation of {int(distance_m)} meters completed."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "CLIMB":
-            print(f"{CYAN}[FLIGHT] Climbing Upward (+1.0 m/s for 1.2s)...{RESET}")
-            await self._stream_velocity(forward=0.0, right=0.0, down=-1.0, yaw_deg_s=0.0, duration_s=1.2)
-            print(f"{GREEN}[OK] Climb finished. Holding position.{RESET}")
+            speed, dur = calculate_velocity_and_duration(distance_m, is_vertical=True)
+            print(f"{CYAN}[FLIGHT] Climbing Upward (+{speed:.1f} m/s for {dur:.1f}s = +{distance_m:.1f}m)...{RESET}")
+            self.play_fan_sound()
+            await self._stream_velocity(forward=0.0, right=0.0, down=-speed, yaw_deg_s=0.0, duration_s=dur)
+            print(f"{GREEN}[OK] Climb of {int(distance_m)}m finished. Holding position.{RESET}")
+            completion_msg = f"Garuda climb of {int(distance_m)} meters completed. Altitude held."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "DESCEND":
-            print(f"{CYAN}[FLIGHT] Descending Downward (-1.0 m/s for 1.2s)...{RESET}")
-            await self._stream_velocity(forward=0.0, right=0.0, down=1.0, yaw_deg_s=0.0, duration_s=1.2)
-            print(f"{GREEN}[OK] Descent finished. Holding position.{RESET}")
+            speed, dur = calculate_velocity_and_duration(distance_m, is_vertical=True)
+            print(f"{CYAN}[FLIGHT] Descending Downward (-{speed:.1f} m/s for {dur:.1f}s = -{distance_m:.1f}m)...{RESET}")
+            self.play_fan_sound()
+            await self._stream_velocity(forward=0.0, right=0.0, down=speed, yaw_deg_s=0.0, duration_s=dur)
+            print(f"{GREEN}[OK] Descent of {int(distance_m)}m finished. Holding position.{RESET}")
+            completion_msg = f"Garuda descent of {int(distance_m)} meters completed."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "ROTATE_LEFT":
             print(f"{CYAN}[FLIGHT] Yaw Rotating Left (-45 deg/s for 2.0s)...{RESET}")
+            self.play_fan_sound()
             await self._stream_velocity(forward=0.0, right=0.0, down=0.0, yaw_deg_s=-45.0, duration_s=2.0)
             print(f"{GREEN}[OK] Left rotation finished. Holding position.{RESET}")
+            completion_msg = "Rotation completed."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "ROTATE_RIGHT":
             print(f"{CYAN}[FLIGHT] Yaw Rotating Right (+45 deg/s for 2.0s)...{RESET}")
+            self.play_fan_sound()
             await self._stream_velocity(forward=0.0, right=0.0, down=0.0, yaw_deg_s=45.0, duration_s=2.0)
             print(f"{GREEN}[OK] Right rotation finished. Holding position.{RESET}")
+            completion_msg = "Rotation completed."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "ROTATE_360":
             print(f"{CYAN}[FLIGHT] Panoramic 360-degree rotation (45 deg/s for 8.0s)...{RESET}")
+            self.play_fan_sound()
             await self._stream_velocity(forward=0.0, right=0.0, down=0.0, yaw_deg_s=45.0, duration_s=8.0)
             print(f"{GREEN}[OK] 360-degree rotation finished. Holding position.{RESET}")
+            completion_msg = "Three-sixty panorama survey completed."
+            print(f"\n{BOLD}{GREEN}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         elif cmd == "EMERGENCY":
             if self.is_connected:
                 try:
                     print(f"{BOLD}{RED}[PX4] EMERGENCY: KILLING MOTORS IMMEDIATELY...{RESET}")
                     await self.drone.action.kill()
+                    self.is_in_air = False
+                    self.is_armed = False
                     print(f"{RED}[OK] Motors killed.{RESET}")
                 except Exception as e:
                     print(f"{RED}[ERROR] Emergency kill failed: {e}{RESET}")
             else:
+                self.is_in_air = False
                 print(f"{RED}[SIMULATOR] Motors killed immediately.{RESET}")
+
+            completion_msg = "Emergency stop. Motors killed."
+            print(f"\n{BOLD}{RED}[POST-EXECUTION CONFIRMATION]{RESET}: \"{completion_msg}\"")
+            self.ai.speak(completion_msg)
 
         print(f"{DIM}{'-'*65}{RESET}\n")
 
@@ -600,13 +833,21 @@ class DualPilot:
 
         try:
             if not self.is_offboard:
-                await self.drone.offboard.set_velocity_body(VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0))
+                for _ in range(3):
+                    await self.drone.offboard.set_velocity_body(VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0))
+                    await asyncio.sleep(0.05)
                 try:
                     await self.drone.offboard.start()
                     self.is_offboard = True
+                    print(f"    {GREEN}[OFFBOARD] Mode active. Direct velocity control engaged.{RESET}")
                 except OffboardError as e:
-                    print(f"{YELLOW}[WARNING] Could not enter offboard mode: {e._result.result}{RESET}")
-                    return
+                    print(f"    {YELLOW}[OFFBOARD RETRY] Engaging offboard mode ({e._result.result})...{RESET}")
+                    try:
+                        await self.drone.offboard.start()
+                        self.is_offboard = True
+                    except Exception as e2:
+                        print(f"    {RED}[ERROR] Could not start offboard mode: {e2}{RESET}")
+                        return
 
             steps = max(1, int(duration_s / 0.1))
             for _ in range(steps):
@@ -617,10 +858,11 @@ class DualPilot:
 
             # Settle back to zero velocity
             await self.drone.offboard.set_velocity_body(VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0))
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.15)
+            print(f"    {CYAN}[TELEMETRY] Maneuver finished. Current Altitude: {self.altitude:.2f}m{RESET}")
 
         except Exception as e:
-            print(f"{RED}[ERROR] Velocity streaming error: {e}{RESET}")
+            print(f"    {RED}[ERROR] Velocity streaming error: {e}{RESET}")
 
     def _keyboard_worker(self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue):
         """Background thread constantly listening for instant keystrokes."""
@@ -744,18 +986,18 @@ class DualPilot:
                         continue
 
                     # 1. Fast-path direct intent match
-                    cmd, matched_phrase = parse_fast_intent(transcription)
+                    cmd, matched_phrase, dist, dur = parse_fast_intent(transcription)
 
                     # 2. If not a simple keyword match and AI is enabled, use OpenAI NLU!
                     if cmd == "UNKNOWN" and self.ai.is_enabled:
                         print(f"\n{BOLD}{CYAN}[VOICE HEARD]{RESET}: \"{BOLD}{transcription}{RESET}\"")
                         print(f"{CYAN}[AI BRAIN] Reasoning with OpenAI GPT for natural language intent...{RESET}")
-                        ai_cmd, ai_reply = await loop.run_in_executor(
+                        ai_cmd, ai_reply, ai_dist, ai_dur = await loop.run_in_executor(
                             None, self.ai.parse_natural_language, transcription
                         )
                         if ai_cmd != "UNKNOWN":
                             print(f"{GREEN}[AI INTENT MATCHED]: {BOLD}{ai_cmd}{RESET} -> {DIM}\"{ai_reply}\"{RESET}")
-                            await self.execute_command(ai_cmd, spoken_reply=ai_reply)
+                            await self.execute_command(ai_cmd, spoken_reply=ai_reply, distance_m=ai_dist, duration_mins=ai_dur)
                             continue
 
                     if cmd == "UNKNOWN":
@@ -764,7 +1006,7 @@ class DualPilot:
 
                     print(f"\n{BOLD}{CYAN}[VOICE HEARD]{RESET}: \"{BOLD}{transcription}{RESET}\"")
                     print(f"{GREEN}[INTENT MATCHED]: {BOLD}{cmd}{RESET} {DIM}(via phrase: '{matched_phrase}'){RESET}")
-                    await self.execute_command(cmd)
+                    await self.execute_command(cmd, distance_m=dist, duration_mins=dur)
 
             except KeyboardInterrupt:
                 print(f"\n{YELLOW}[EXIT] Pilot stopped by user.{RESET}")

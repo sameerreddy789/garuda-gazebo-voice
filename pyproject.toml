@@ -4,8 +4,8 @@ build-backend = "setuptools.backends._legacy:_Backend"
 
 [project]
 name = "garudaone-droneos"
-version = "0.1.0"
-description = "GarudaOne DroneOS — Autonomous AI-powered cinematography drone companion computer software"
+version = "0.2.0"
+description = "GarudaOne DroneOS — Autonomous AI-powered cinematography drone with voice copilot and 3D simulation"
 readme = "README.md"
 license = {text = "Proprietary"}
 requires-python = ">=3.11"

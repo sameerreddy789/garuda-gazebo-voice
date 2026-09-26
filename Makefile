@@ -17,6 +17,10 @@ run-sitl:
 sitl:
 	wsl bash scripts/launch_sitl.sh
 
+# Launch PX4 SITL + Gazebo in 3D City Environment (Skyscrapers, Boulevards, Rooftop Helipads)
+sitl-city:
+	wsl bash scripts/launch_sitl.sh --world city
+
 # Setup PX4 SITL environment in WSL2 (one-time installation)
 sitl-setup:
 	wsl bash scripts/setup_sitl.sh

@@ -1,0 +1,778 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sdf version="1.9">
+  <world name="city">
+    <!-- ── Physics Engine Configuration (250 Hz ODE) ── -->
+    <physics type="ode">
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>250</real_time_update_rate>
+    </physics>
+    <gravity>0 0 -9.80665</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type="adiabatic"/>
+
+    <scene>
+      <grid>false</grid>
+      <ambient>0.65 0.67 0.72 1.0</ambient>
+      <background>0.70 0.80 0.92 1.0</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <!-- ── Sun Light ── -->
+    <light name="sun" type="directional">
+      <pose>40 50 500 0 0 0</pose>
+      <cast_shadows>true</cast_shadows>
+      <intensity>1.35</intensity>
+      <direction>-0.35 -0.4 -0.84</direction>
+      <diffuse>0.98 0.96 0.92 1.0</diffuse>
+      <specular>0.3 0.3 0.3 1.0</specular>
+    </light>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════
+         1. GROUND, BOULEVARDS & CENTRAL LAUNCH PLAZA
+         ══════════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Master Asphalt Ground Plane (800m x 800m) -->
+    <model name="city_ground">
+      <static>true</static>
+      <link name="ground_link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>800 800</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="asphalt">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>800 800</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.18 0.18 0.20 1.0</ambient>
+            <diffuse>0.22 0.22 0.24 1.0</diffuse>
+            <specular>0.08 0.08 0.08 1.0</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Central Plaza (44m x 44m granite drone staging area at origin) -->
+    <model name="central_plaza">
+      <static>true</static>
+      <pose>0 0 0.02 0 0 0</pose>
+      <link name="plaza_link">
+        <collision name="plaza_col">
+          <geometry>
+            <box>
+              <size>44.0 44.0 0.04</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="plaza_vis">
+          <geometry>
+            <box>
+              <size>44.0 44.0 0.04</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.62 0.64 0.66 1.0</ambient>
+            <diffuse>0.70 0.72 0.74 1.0</diffuse>
+            <specular>0.15 0.15 0.15 1.0</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Ground Level Primary Dronepad at Origin (0, 0, 0.05) with 'D' Identifier -->
+    <include>
+      <name>takeoff_dronepad</name>
+      <uri>model://dronepad</uri>
+      <pose>0 0 0.045 0 0 0</pose>
+    </include>
+
+    <!-- 3D Geometric Relief Letter 'D' on Ground Dronepad -->
+    <model name="ground_letter_d">
+      <static>true</static>
+      <pose>0 0 0.052 0 0 0</pose>
+      <link name="d_spine">
+        <visual name="spine_vis">
+          <pose>-0.7 0 0 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.6 3.0 0.015</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.0 1.0</ambient>
+            <diffuse>1.0 0.86 0.0 1.0</diffuse>
+          </material>
+        </visual>
+        <visual name="top_bar_vis">
+          <pose>0.0 1.2 0 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.0 0.6 0.015</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.0 1.0</ambient>
+            <diffuse>1.0 0.86 0.0 1.0</diffuse>
+          </material>
+        </visual>
+        <visual name="bottom_bar_vis">
+          <pose>0.0 -1.2 0 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.0 0.6 0.015</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.0 1.0</ambient>
+            <diffuse>1.0 0.86 0.0 1.0</diffuse>
+          </material>
+        </visual>
+        <visual name="right_curve_vis">
+          <pose>0.7 0 0 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.6 1.8 0.015</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.0 1.0</ambient>
+            <diffuse>1.0 0.86 0.0 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- North-South Main Avenue Roadway (32m wide corridor) -->
+    <model name="avenue_ns">
+      <static>true</static>
+      <pose>0 0 0.01 0 0 0</pose>
+      <link name="link">
+        <visual name="road">
+          <geometry>
+            <box>
+              <size>32.0 400.0 0.02</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.14 0.14 0.15 1.0</ambient>
+            <diffuse>0.18 0.18 0.19 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- East-West Main Boulevard Roadway (32m wide corridor) -->
+    <model name="boulevard_ew">
+      <static>true</static>
+      <pose>0 0 0.01 0 0 0</pose>
+      <link name="link">
+        <visual name="road">
+          <geometry>
+            <box>
+              <size>400.0 32.0 0.02</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.14 0.14 0.15 1.0</ambient>
+            <diffuse>0.18 0.18 0.19 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════
+         2. QUADRANT 1: NORTH-EAST (FINANCIAL DISTRICT)
+         ══════════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Apex Financial Tower (75m High-Rise Glass Skyscraper) -->
+    <model name="apex_tower">
+      <static>true</static>
+      <pose>55 55 37.5 0 0 0</pose>
+      <link name="tower_body">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>28.0 28.0 75.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="glass_vis">
+          <geometry>
+            <box>
+              <size>28.0 28.0 75.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.18 0.32 0.48 1.0</ambient>
+            <diffuse>0.24 0.42 0.62 1.0</diffuse>
+            <specular>0.7 0.7 0.8 1.0</specular>
+          </material>
+        </visual>
+      </link>
+      <!-- Telecommunications Spire on Apex Tower (+18m, Total height: 93m) -->
+      <link name="spire">
+        <pose>0 0 46.5 0 0 0</pose>
+        <collision name="spire_col">
+          <geometry>
+            <cylinder>
+              <radius>0.6</radius>
+              <length>18.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="spire_vis">
+          <geometry>
+            <cylinder>
+              <radius>0.6</radius>
+              <length>18.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.85 0.15 0.15 1.0</ambient>
+            <diffuse>0.92 0.20 0.20 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Commerce Plaza Building (45m Commercial Block) -->
+    <model name="commerce_plaza">
+      <static>true</static>
+      <pose>100 50 22.5 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>26.0 32.0 45.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>26.0 32.0 45.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.26 0.28 0.32 1.0</ambient>
+            <diffuse>0.34 0.37 0.42 1.0</diffuse>
+            <specular>0.3 0.3 0.3 1.0</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Banking Center Tower (55m Silver Glass High-Rise) -->
+    <model name="banking_center">
+      <static>true</static>
+      <pose>55 100 27.5 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>30.0 24.0 55.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>30.0 24.0 55.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.38 0.44 0.50 1.0</ambient>
+            <diffuse>0.48 0.55 0.62 1.0</diffuse>
+            <specular>0.6 0.6 0.6 1.0</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════
+         3. QUADRANT 2: NORTH-WEST (TECH & ROOFTOP HELIPAD DISTRICT)
+         ══════════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Skyline Tech Tower (50m High-Rise with Skyscraper Rooftop Helipad) -->
+    <model name="tech_tower">
+      <static>true</static>
+      <pose>-55 55 25.0 0 0 0</pose>
+      <link name="tower_body">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>30.0 30.0 50.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="dark_glass_vis">
+          <geometry>
+            <box>
+              <size>30.0 30.0 50.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.20 0.22 0.26 1.0</ambient>
+            <diffuse>0.28 0.30 0.35 1.0</diffuse>
+            <specular>0.5 0.5 0.5 1.0</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Helipad Elevated Landing Platform on Roof -->
+      <link name="roof_platform">
+        <pose>0 0 25.1 0 0 0</pose>
+        <collision name="plat_col">
+          <geometry>
+            <box>
+              <size>20.0 20.0 0.2</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="plat_vis">
+          <geometry>
+            <box>
+              <size>20.0 20.0 0.2</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.75 0.70 0.15 1.0</ambient>
+            <diffuse>0.85 0.78 0.20 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Rooftop Dronepad at 50.25m Altitude (North=-55, East=55) with 'D' Identifier -->
+    <include>
+      <name>rooftop_dronepad</name>
+      <uri>model://dronepad</uri>
+      <pose>-55 55 50.25 0 0 0</pose>
+    </include>
+
+    <!-- 3D Geometric Relief Letter 'D' on Rooftop Dronepad -->
+    <model name="roof_letter_d">
+      <static>true</static>
+      <pose>-55 55 50.32 0 0 0</pose>
+      <link name="d_spine">
+        <visual name="spine_vis">
+          <pose>-0.7 0 0 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.6 3.0 0.015</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.0 1.0</ambient>
+            <diffuse>1.0 0.86 0.0 1.0</diffuse>
+          </material>
+        </visual>
+        <visual name="top_bar_vis">
+          <pose>0.0 1.2 0 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.0 0.6 0.015</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.0 1.0</ambient>
+            <diffuse>1.0 0.86 0.0 1.0</diffuse>
+          </material>
+        </visual>
+        <visual name="bottom_bar_vis">
+          <pose>0.0 -1.2 0 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.0 0.6 0.015</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.0 1.0</ambient>
+            <diffuse>1.0 0.86 0.0 1.0</diffuse>
+          </material>
+        </visual>
+        <visual name="right_curve_vis">
+          <pose>0.7 0 0 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.6 1.8 0.015</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.0 1.0</ambient>
+            <diffuse>1.0 0.86 0.0 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Data Center Hub (30m Solid Industrial Block) -->
+    <model name="data_center">
+      <static>true</static>
+      <pose>-100 50 15.0 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>34.0 28.0 30.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>34.0 28.0 30.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.32 0.35 0.38 1.0</ambient>
+            <diffuse>0.40 0.43 0.46 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Quantum Research Tower (65m Cyan Glass Skyscraper) -->
+    <model name="quantum_tower">
+      <static>true</static>
+      <pose>-55 100 32.5 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>26.0 26.0 65.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>26.0 26.0 65.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.16 0.38 0.46 1.0</ambient>
+            <diffuse>0.22 0.48 0.58 1.0</diffuse>
+            <specular>0.7 0.7 0.8 1.0</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════
+         4. QUADRANT 3: SOUTH-WEST (HOTEL & RESIDENTIAL DISTRICT)
+         ══════════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Metropolis Grand Hotel (60m Sandstone & Bronze High-Rise) -->
+    <model name="grand_hotel">
+      <static>true</static>
+      <pose>-55 -55 30.0 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>32.0 26.0 60.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>32.0 26.0 60.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.42 0.36 0.30 1.0</ambient>
+            <diffuse>0.52 0.45 0.38 1.0</diffuse>
+            <specular>0.4 0.35 0.3 1.0</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Residential Tower Alpha (40m Apartment Complex) -->
+    <model name="residential_alpha">
+      <static>true</static>
+      <pose>-100 -50 20.0 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>26.0 32.0 40.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>26.0 32.0 40.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.62 0.62 0.65 1.0</ambient>
+            <diffuse>0.72 0.72 0.75 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Residential Tower Beta (42m Apartment Complex) -->
+    <model name="residential_beta">
+      <static>true</static>
+      <pose>-55 -100 21.0 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>32.0 24.0 42.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>32.0 24.0 42.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.58 0.60 0.62 1.0</ambient>
+            <diffuse>0.68 0.70 0.72 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════
+         5. QUADRANT 4: SOUTH-EAST (CIVIC, MEDIA & BROADCAST DISTRICT)
+         ══════════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Broadcast Station & Mast (30m Building + 35m Radio Mast = 65m Total) -->
+    <model name="broadcast_tower">
+      <static>true</static>
+      <pose>55 -55 15.0 0 0 0</pose>
+      <link name="base_building">
+        <collision name="base_col">
+          <geometry>
+            <box>
+              <size>26.0 26.0 30.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="base_vis">
+          <geometry>
+            <box>
+              <size>26.0 26.0 30.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.28 0.30 0.32 1.0</ambient>
+            <diffuse>0.36 0.38 0.40 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Lattice Antenna Mast -->
+      <link name="antenna_mast">
+        <pose>0 0 32.5 0 0 0</pose>
+        <collision name="mast_col">
+          <geometry>
+            <cylinder>
+              <radius>1.0</radius>
+              <length>35.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="mast_vis">
+          <geometry>
+            <cylinder>
+              <radius>1.0</radius>
+              <length>35.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.88 0.18 0.18 1.0</ambient>
+            <diffuse>0.95 0.22 0.22 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Civic Center Hall (35m Marble & Tinted Glass Pavilion) -->
+    <model name="civic_center">
+      <static>true</static>
+      <pose>100 -50 17.5 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>34.0 26.0 35.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>34.0 26.0 35.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.60 0.62 0.65 1.0</ambient>
+            <diffuse>0.70 0.72 0.76 1.0</diffuse>
+            <specular>0.4 0.4 0.4 1.0</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Exhibition & Convention Pavilion (25m Wide Hall) -->
+    <model name="convention_hall">
+      <static>true</static>
+      <pose>55 -100 12.5 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <box>
+              <size>34.0 30.0 25.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <box>
+              <size>34.0 30.0 25.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.40 0.35 0.30 1.0</ambient>
+            <diffuse>0.48 0.42 0.36 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════
+         6. BOULEVARD LIGHTING PYLONS (URBAN NAVIGATIONAL BEACONS)
+         ══════════════════════════════════════════════════════════════════════════ -->
+
+    <!-- North Light Pylon (12m tall, at North = 30m) -->
+    <model name="pylon_north">
+      <static>true</static>
+      <pose>0 28 6.0 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>12.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>12.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.2 1.0</ambient>
+            <diffuse>0.9 0.9 0.3 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- South Light Pylon (12m tall, at South = -30m) -->
+    <model name="pylon_south">
+      <static>true</static>
+      <pose>0 -28 6.0 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>12.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>12.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.2 1.0</ambient>
+            <diffuse>0.9 0.9 0.3 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- East Light Pylon (12m tall, at East = 28m) -->
+    <model name="pylon_east">
+      <static>true</static>
+      <pose>28 0 6.0 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>12.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>12.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.2 1.0</ambient>
+            <diffuse>0.9 0.9 0.3 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- West Light Pylon (12m tall, at West = -28m) -->
+    <model name="pylon_west">
+      <static>true</static>
+      <pose>-28 0 6.0 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>12.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>12.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.2 1.0</ambient>
+            <diffuse>0.9 0.9 0.3 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

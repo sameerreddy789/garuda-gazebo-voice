@@ -15,8 +15,9 @@ Technical architecture, validated decisions, and strategic positioning for the G
 | 06 | [OS & Communications](06_os_and_comms.md) | Ubuntu + MAVSDK + PX4 OFFBOARD architecture |
 | 07 | [Market Positioning](07_market_positioning.md) | Pricing, competition, and go-to-market |
 | 08 | [Validation Report](08_validation_report.md) | Stress-tested assumptions and corrections |
-
-## Key Decisions
+| 09 | [VR Post Production](09_vr_post_production.md) | Virtual production workflows |
+| 10 | [3D Scene Understanding](10_3d_scene_understanding.md) | Spatial reasoning and volumetric analysis |
+| 11 | [3D City Simulation & Voice Flight](11_city_simulation_and_voice_flight.md) | Gazebo Harmonic 3D city, Dronepad D, MAVSDK offboard velocity vectors, and voice copilot |
 - **Flight Controller:** PX4 (BSD license — proprietary modifications allowed)
 - **Communication:** MAVSDK-Python (PX4's official async SDK)
 - **AI Compute:** Raspberry Pi 5 (CPU-only, no GPU required)

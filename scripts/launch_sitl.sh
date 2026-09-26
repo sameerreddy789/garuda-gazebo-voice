@@ -15,6 +15,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Ensure WSLg GUI Display is configured if running under WSL2
+if [ -d "/mnt/wslg" ]; then
+    export DISPLAY="${DISPLAY:-:0}"
+    export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/mnt/wslg/runtime-dir}"
+    export PULSE_SERVER="${PULSE_SERVER:-unix:/mnt/wslg/PulseServer}"
+fi
+
+# Ensure Gazebo finds custom models (like helipad) and custom worlds
+export GZ_SIM_RESOURCE_PATH="$PX4_DIR/Tools/simulation/gz/models:$PX4_DIR/Tools/simulation/gz/worlds:${GZ_SIM_RESOURCE_PATH}"
+export SDF_PATH="$PX4_DIR/Tools/simulation/gz/models:${SDF_PATH}"
+
 export PX4_GZ_WORLD="$WORLD"
 export PX4_HOME_LAT="${SITL_LAT:-12.9716}"
 export PX4_HOME_LON="${SITL_LON:-77.5946}"

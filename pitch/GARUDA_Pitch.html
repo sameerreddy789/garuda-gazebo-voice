@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GARUDA — HackFusion 2026</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f7f8fa;
+    --text: #1a1a2e;
+    --text-2: #555770;
+    --text-3: #8b8da3;
+    --blue: #2563eb;
+    --blue-light: #eff4ff;
+    --red: #dc2626;
+    --red-light: #fef2f2;
+    --green: #16a34a;
+    --green-light: #f0fdf4;
+    --amber: #d97706;
+    --amber-light: #fffbeb;
+    --border: #e5e7eb;
+    --radius: 8px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'IBM Plex Sans', -apple-system, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  .deck { position: relative; width: 100vw; height: 100vh; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 56px 80px 80px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.35s ease;
+  }
+  .slide.active { opacity: 1; pointer-events: auto; }
+
+  .slide-inner {
+    width: 100%; max-width: 960px;
+    display: flex; flex-direction: column;
+    align-items: flex-start;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .slide-inner::-webkit-scrollbar { width: 3px; }
+  .slide-inner::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .slide-inner.centered { align-items: center; text-align: center; }
+
+  /* ── Nav ── */
+  .nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 48px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px; z-index: 50;
+    font-size: 13px; color: var(--text-3);
+  }
+  .nav button {
+    background: none; border: none; color: var(--text-2);
+    font: inherit; cursor: pointer; padding: 6px 12px;
+    border-radius: 4px;
+  }
+  .nav button:hover { background: var(--bg-alt); }
+  .dots { display: flex; gap: 6px; }
+  .dots span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--border); cursor: pointer;
+    transition: all 0.2s;
+  }
+  .dots span.on { background: var(--blue); width: 18px; border-radius: 3px; }
+
+  /* ── Typography ── */
+  .label {
+    font-size: 12px; font-weight: 600; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--blue); margin-bottom: 10px;
+  }
+  h1 { font-size: 44px; font-weight: 700; line-height: 1.15; color: var(--text); }
+  h2 { font-size: 32px; font-weight: 700; line-height: 1.2; color: var(--text); margin-bottom: 12px; }
+  h3 { font-size: 17px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .sub { font-size: 18px; color: var(--text-2); line-height: 1.6; margin-top: 12px; max-width: 640px; }
+  .small { font-size: 13px; color: var(--text-3); line-height: 1.5; }
+
+  /* ── Layout helpers ── */
+  .row { display: flex; gap: 32px; width: 100%; margin-top: 28px; }
+  .row > * { flex: 1; }
+  .col { display: flex; flex-direction: column; gap: 14px; }
+
+  .mt-12 { margin-top: 12px; }
+  .mt-20 { margin-top: 20px; }
+  .mt-28 { margin-top: 28px; }
+  .mt-40 { margin-top: 40px; }
+  .mb-4 { margin-bottom: 4px; }
+  .w-full { width: 100%; }
+
+  /* ── Boxes ── */
+  .box {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .box h3 { font-size: 15px; margin-bottom: 4px; }
+  .box p { font-size: 13.5px; color: var(--text-2); line-height: 1.55; }
+
+  .box-blue { background: var(--blue-light); border-color: #dbeafe; }
+  .box-red { background: var(--red-light); border-color: #fecaca; }
+  .box-green { background: var(--green-light); border-color: #bbf7d0; }
+  .box-amber { background: var(--amber-light); border-color: #fde68a; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 16px; }
+  th { text-align: left; font-weight: 600; padding: 10px 14px; background: var(--bg-alt); border-bottom: 2px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-3); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text-2); line-height: 1.45; }
+  td:first-child { color: var(--text); font-weight: 500; }
+
+  /* ── Code ── */
+  code, .mono { font-family: 'IBM Plex Mono', monospace; }
+  .code-sm {
+    background: var(--bg-alt); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 18px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px; line-height: 1.65; color: var(--text);
+    white-space: pre; overflow-x: auto;
+  }
+
+  /* ── Equation ── */
+  .eq {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px; color: var(--text);
+    padding: 8px 0;
+  }
+
+  /* ── Tags ── */
+  .tag {
+    display: inline-block; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px;
+    letter-spacing: 0.3px;
+  }
+  .tag-b { background: var(--blue-light); color: var(--blue); }
+  .tag-r { background: var(--red-light); color: var(--red); }
+  .tag-g { background: var(--green-light); color: var(--green); }
+  .tag-a { background: var(--amber-light); color: var(--amber); }
+
+  /* ── Tier bar ── */
+  .tier {
+    display: flex; border-radius: 6px; overflow: hidden;
+    border: 1px solid var(--border); margin-bottom: 6px;
+  }
+  .tier-label {
+    width: 80px; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.5px; flex-shrink: 0; color: #fff;
+  }
+  .tier-body { padding: 10px 14px; flex: 1; }
+  .tier-body strong { font-size: 13.5px; display: block; color: var(--text); }
+  .tier-body span { font-size: 12px; color: var(--text-2); }
+
+  /* ── Stat ── */
+  .stats { display: flex; gap: 40px; margin-top: 32px; }
+  .stat-n { font-size: 36px; font-weight: 700; color: var(--blue); line-height: 1; }
+  .stat-l { font-size: 12px; color: var(--text-3); margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* ── Pipeline step ── */
+  .step { display: flex; align-items: flex-start; gap: 14px; padding: 10px 0; }
+  .step-n {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--blue-light); color: var(--blue);
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .step p { font-size: 14px; color: var(--text-2); line-height: 1.5; }
+  .step strong { color: var(--text); }
+
+  /* ── Highlight quote ── */
+  .quote {
+    border-left: 3px solid var(--blue);
+    padding: 12px 20px;
+    background: var(--blue-light);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 15px; color: var(--text); line-height: 1.55;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .slide { padding: 32px 24px 72px; }
+    h1 { font-size: 30px; }
+    h2 { font-size: 24px; }
+    .row { flex-direction: column; gap: 16px; }
+    .stats { flex-wrap: wrap; gap: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<!-- ══════════ SLIDE 0: TITLE ══════════ -->
+<div class="slide active" data-slide="0">
+  <div class="slide-inner centered">
+    <p class="label">HackFusion 2026 · IEEE Robotics & Automation Society · Theme 3</p>
+    <h1 style="font-size: clamp(36px, 5vw, 56px);">GARUDA</h1>
+    <p class="sub" style="max-width: 540px;">
+      A physics-informed digital twin that monitors a drone's health in real-time,
+      predicts failures before they happen, and makes autonomous safety decisions
+      it can explain.
+    </p>
+    <div class="stats">
+      <div><div class="stat-n">7</div><div class="stat-l">Physics models</div></div>
+      <div><div class="stat-n">6</div><div class="stat-l">Decision tiers</div></div>
+      <div><div class="stat-n">7</div><div class="stat-l">Kalman filters</div></div>
+      <div><div class="stat-n">5</div><div class="stat-l">Failure demos</div></div>
+    </div>
+    <p class="small mt-40">Team GarudaOne · Press → or Space to navigate</p>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 1: PROBLEM ══════════ -->
+<div class="slide" data-slide="1">
+  <div class="slide-inner">
+    <p class="label">The Problem</p>
+    <h2>Drones don't understand their own physics</h2>
+    <p class="sub" style="margin-top: 8px;">
+      A drone in turbulent wind burns more power. A hot battery loses capacity.
+      A worn motor creates asymmetric thrust. Today's drones don't track any of this —
+      they find out when they crash.
+    </p>
+
+    <div class="row" style="margin-top: 24px;">
+      <div class="box">
+        <h3>No energy awareness</h3>
+        <p>Battery drains unpredictably under wind load. The drone doesn't know it can't make it home until it's already too late.</p>
+      </div>
+      <div class="box">
+        <h3>Blind to atmosphere</h3>
+        <p>Air density drops at altitude, turbulence varies with terrain, temperature affects everything. None of this is modeled.</p>
+      </div>
+      <div class="box">
+        <h3>No component health</h3>
+        <p>Motor bearings wear, batteries heat up, propellers degrade. There's no way to detect partial failure before it becomes total.</p>
+      </div>
+    </div>
+
+    <div class="quote mt-28">
+      We need a system that continuously estimates the drone's physical state, predicts
+      failures, quantifies how certain it is, and makes safety decisions it can justify.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 2: WHAT WE BUILT ══════════ -->
+<div class="slide" data-slide="2">
+  <div class="slide-inner">
+    <p class="label">Our Approach</p>
+    <h2>Five physics modules running in a loop at 10 Hz</h2>
+    <p class="sub" style="margin-top: 4px;">Each module feeds into the next. The decision engine sits on top and evaluates the complete picture every 100ms.</p>
+
+    <table class="mt-20">
+      <thead>
+        <tr><th style="width: 200px;">Module</th><th>What it does</th><th style="width: 180px;">Physics basis</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Environment Model</td>
+          <td>Simulates wind, air density, temperature, pressure, and turbulence as a function of altitude and time</td>
+          <td>ICAO ISA + Dryden (O-U process)</td>
+        </tr>
+        <tr>
+          <td>Vehicle Health</td>
+          <td>Tracks battery temperature, charge state, per-motor efficiency, payload mass, and structural G-stress</td>
+          <td>Thermal ODE + Coulomb counting</td>
+        </tr>
+        <tr>
+          <td>Energy Forecasting</td>
+          <td>Predicts power consumption, remaining flight time, and whether the mission is still feasible</td>
+          <td>Actuator Disk Theory</td>
+        </tr>
+        <tr>
+          <td>State Estimator</td>
+          <td>Fuses physics predictions with noisy sensor data. Outputs 95% confidence intervals on every state</td>
+          <td>7× Kalman filters</td>
+        </tr>
+        <tr>
+          <td>Decision Engine</td>
+          <td>Evaluates all states and decides: continue, slow down, change altitude, return home, or abort</td>
+          <td>6-tier hierarchical rules</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 3: ARCHITECTURE ══════════ -->
+<div class="slide" data-slide="3">
+  <div class="slide-inner">
+    <p class="label">Architecture</p>
+    <h2>How the pieces fit together</h2>
+
+    <div class="code-sm mt-20" style="width: 100%; font-size: 12px; line-height: 1.8;">
+┌─────────────────────────────────────────────────────────────────┐
+│  DASHBOARD  (Rich TUI — 6 panels, 10 Hz refresh)               │
+│  Telemetry · Environment · Health · Energy · Uncertainty · AI   │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │ JSON telemetry snapshots
+┌──────────────────────────────┴──────────────────────────────────┐
+│  DIGITAL TWIN ENGINE  (Python, 10 Hz main loop)                 │
+│                                                                  │
+│  ┌──────────────┐ ┌───────────────┐ ┌────────────────────────┐  │
+│  │ Environment   │ │ Vehicle       │ │ Energy &amp; Endurance     │  │
+│  │ ISA + Dryden  │ │ Battery ODE   │ │ Actuator Disk Theory   │  │
+│  │ wind/density  │ │ 4× rotors     │ │ safe envelope          │  │
+│  └──────┬───────┘ └───────┬───────┘ └──────────┬─────────────┘  │
+│         └─────────────────┼─────────────────────┘                │
+│                    ┌──────┴──────┐                                │
+│                    │ Kalman      │   7 state filters              │
+│                    │ Filter UQ   │   95% confidence bounds        │
+│                    └──────┬──────┘                                │
+│                    ┌──────┴──────┐                                │
+│                    │ DECISION    │   6-tier hierarchical engine   │
+│                    │ ENGINE      │   + evidence trail logger      │
+│                    └─────────────┘                                │
+└──────────────────────────────────────────────────────────────────┘
+                               │ autonomous commands
+┌──────────────────────────────┴──────────────────────────────────┐
+│  FLIGHT LAYER   PX4 via MAVSDK · Voice ("Hey Garuda") · LFM AI │
+└─────────────────────────────────────────────────────────────────┘</div>
+
+    <p class="small mt-12">Fully async Python. Event-bus decoupled modules. 14 drone states with enforced transitions. Real hardware parameters from our 249g prototype.</p>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 4: PHYSICS — ENVIRONMENT ══════════ -->
+<div class="slide" data-slide="4">
+  <div class="slide-inner">
+    <p class="label">Physics Models</p>
+    <h2>Environment: atmosphere + wind</h2>
+
+    <div class="row" style="margin-top: 20px;">
+      <div class="col">
+        <h3>ICAO Standard Atmosphere</h3>
+        <p class="small mb-4">Altitude-dependent temperature, pressure, and air density:</p>
+        <div class="eq">T(h) = 288.15 − 0.0065 · h</div>
+        <div class="eq">ρ(h) = 1.225 · (T / 288.15)<sup>4.256</sup></div>
+        <p style="font-size: 13px; color: var(--text-2); margin-top: 8px;">
+          Air density drops with altitude — this directly affects how much power
+          the motors need to produce the same thrust. We recalculate this every tick.
+        </p>
+
+        <h3 class="mt-20">Dryden Wind Turbulence</h3>
+        <p class="small mb-4">Stochastic gusts modeled as an Ornstein-Uhlenbeck process:</p>
+        <div class="eq">x(t+dt) = x(t)·e<sup>−dt/τ</sup> + σ√(1−e<sup>−2dt/τ</sup>)·N(0,1)</div>
+        <p style="font-size: 13px; color: var(--text-2); margin-top: 8px;">
+          Wind is random but correlated in time (τ = 4s). This is the standard
+          model used in aerospace (MIL-F-8785C). The vertical axis has
+          60% lower turbulence than horizontal — matches real atmospheric behavior.
+        </p>
+      </div>
+
+      <div class="col">
+        <h3>Disturbance scenarios we can inject live</h3>
+        <div class="box" style="margin-top: 2px;">
+          <p><strong>Crosswind gust:</strong> 12 m/s sudden lateral wind</p>
+        </div>
+        <div class="box">
+          <p><strong>Temperature spike:</strong> +20°C (flying over a heat island)</p>
+        </div>
+        <div class="box">
+          <p><strong>Downdraft:</strong> 5 m/s vertical shear (microburst)</p>
+        </div>
+        <div class="box">
+          <p><strong>Wind shear layer:</strong> Altitude-dependent velocity gradient</p>
+        </div>
+        <p style="font-size: 13px; color: var(--text-2); margin-top: 12px;">
+          These aren't hypothetical — each one is a single function call
+          that changes the simulation state, and the decision engine
+          reacts within the same tick.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 5: PHYSICS — VEHICLE + ENERGY ══════════ -->
+<div class="slide" data-slide="5">
+  <div class="slide-inner">
+    <p class="label">Physics Models</p>
+    <h2>Vehicle health + energy forecasting</h2>
+
+    <div class="row" style="margin-top: 20px;">
+      <div class="col">
+        <h3>Battery: thermal ODE + Coulomb counting</h3>
+        <div class="eq">dT/dt = (I²R − h·A·ΔT) / (m·Cₚ)</div>
+        <p style="font-size: 13px; color: var(--text-2); margin-top: 6px; line-height: 1.55;">
+          The battery heats from internal resistance (I²R) and cools from
+          airflow (h scales with airspeed). We track the thermal state every tick because
+          LiPo capacity drops with temperature — a hot battery gives you less flight time
+          than the voltage suggests.
+        </p>
+        <div class="eq mt-12">V = 3S · (3.3 + 0.9·SoC<sup>0.8</sup>) − I·R<sub>int</sub></div>
+        <p style="font-size: 13px; color: var(--text-2); margin-top: 6px;">
+          Real LiPo discharge curve. Parameters match our actual 3S/450mAh pack (0.08Ω internal resistance).
+        </p>
+
+        <h3 class="mt-20">Motor degradation</h3>
+        <p style="font-size: 13px; color: var(--text-2); line-height: 1.55;">
+          Each of the 4 motors is tracked independently. Bearing wear degrades
+          efficiency at 15%/1000h. The delta between best and worst motor
+          (imbalance) is a key safety signal — asymmetric thrust is dangerous.
+        </p>
+      </div>
+
+      <div class="col">
+        <h3>Power: Actuator Disk Momentum Theory</h3>
+        <div class="eq">P<sub>hover</sub> = √(T³ / 2ρA) · κ / η</div>
+        <div class="eq">P<sub>fwd</sub> = P<sub>hover</sub>·f(v) + ½ρCdAv³</div>
+        <p style="font-size: 13px; color: var(--text-2); margin-top: 6px; line-height: 1.55;">
+          Hover power depends on thrust, air density, disk area (4× 2-inch props),
+          and rotor efficiency. Forward flight adds parasitic drag.
+          All parameters come from our real hardware config.
+        </p>
+
+        <h3 class="mt-20">Safe operating envelope</h3>
+        <p style="font-size: 13px; color: var(--text-2); line-height: 1.55;">
+          Computed dynamically every tick based on current health + environment:
+        </p>
+        <ul style="font-size: 13px; color: var(--text-2); padding-left: 18px; margin-top: 6px; line-height: 1.7;">
+          <li>Max altitude (density-limited)</li>
+          <li>Max speed (rotor-efficiency-limited)</li>
+          <li>Max range at cruise speed</li>
+          <li>Can we reach the target, come home, and still have 30s reserve?</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 6: KALMAN FILTER ══════════ -->
+<div class="slide" data-slide="6">
+  <div class="slide-inner">
+    <p class="label">Uncertainty Quantification</p>
+    <h2>Kalman filter: physics meets sensors</h2>
+    <p class="sub" style="margin-top: 4px; max-width: 720px;">
+      The physics models predict what should happen. The sensors measure what actually happened.
+      The Kalman filter figures out the best estimate and tells you how confident it is.
+    </p>
+
+    <div class="row" style="margin-top: 20px;">
+      <div>
+        <h3>How it works, every tick:</h3>
+        <div class="code-sm mt-12" style="font-size: 12px;">
+<b>Predict</b> (from physics model):
+  x̂ = model_prediction(alt, speed, wind)
+  P += Q · dt         ← uncertainty grows
+
+<b>Update</b> (from noisy sensor):
+  K = P / (P + R)     ← Kalman gain
+  x̂ += K · (z − x̂)   ← fuse measurement
+  P = (1 − K) · P     ← uncertainty shrinks
+
+<b>Output</b>:
+  estimate ± 2σ       ← 95% confidence band</div>
+      </div>
+
+      <div>
+        <h3>7 independent filters tracking:</h3>
+        <table style="margin-top: 8px;">
+          <thead><tr><th>State</th><th>Sensor noise (σ)</th></tr></thead>
+          <tbody>
+            <tr><td>Position N, E</td><td>GPS: 0.25 m</td></tr>
+            <tr><td>Altitude</td><td>Barometer: 0.25 m</td></tr>
+            <tr><td>Airspeed</td><td>Pitot: 0.20 m/s</td></tr>
+            <tr><td>Wind speed</td><td>Inferred: 0.40 m/s</td></tr>
+            <tr><td>Battery SoC</td><td>Current sensor: 0.30%</td></tr>
+            <tr><td>Endurance</td><td>Derived: ±25 s</td></tr>
+          </tbody>
+        </table>
+        <p class="small mt-12">
+          The dashboard shows every estimate with its confidence interval.
+          The decision engine uses uncertainty to calibrate how aggressive its responses are.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 7: DECISION ENGINE ══════════ -->
+<div class="slide" data-slide="7">
+  <div class="slide-inner">
+    <p class="label">Autonomous Decisions</p>
+    <h2>6-tier hierarchical safety engine</h2>
+    <p class="sub" style="margin-top: 4px;">Evaluates from most severe to least. Stops at the first tier that triggers. Every decision carries an evidence trail.</p>
+
+    <div style="width: 100%; margin-top: 20px;">
+      <div class="tier">
+        <div class="tier-label" style="background: #dc2626;">ABORT</div>
+        <div class="tier-body">
+          <strong>Emergency landing — immediate</strong>
+          <span>Battery ≥ 60°C · rotor efficiency &lt; 30% · structural stress exceeded · endurance &lt; 45s</span>
+        </div>
+      </div>
+      <div class="tier">
+        <div class="tier-label" style="background: #ea580c;">RTB</div>
+        <div class="tier-body">
+          <strong>Return to base</strong>
+          <span>Not enough energy for RTH · SoC ≤ 18% · battery ≥ 50°C · motor degradation · wind ≥ 8.5 m/s</span>
+        </div>
+      </div>
+      <div class="tier">
+        <div class="tier-label" style="background: #0891b2;">ALT</div>
+        <div class="tier-body">
+          <strong>Change altitude</strong>
+          <span>Air density too thin at current height · vertical downdraft ≥ 3 m/s</span>
+        </div>
+      </div>
+      <div class="tier">
+        <div class="tier-label" style="background: #0891b2;">SLOW</div>
+        <div class="tier-body">
+          <strong>Reduce speed</strong>
+          <span>Turbulence intensity ≥ 0.50 · crosswind ≥ 5.5 m/s · rotor imbalance ≥ 0.15</span>
+        </div>
+      </div>
+      <div class="tier">
+        <div class="tier-label" style="background: #2563eb;">ROUTE</div>
+        <div class="tier-body">
+          <strong>Modify trajectory</strong>
+          <span>Headwind ≥ 60% of airspeed — reroute to save energy</span>
+        </div>
+      </div>
+      <div class="tier">
+        <div class="tier-label" style="background: #16a34a;">GO</div>
+        <div class="tier-body">
+          <strong>Continue mission</strong>
+          <span>All parameters nominal. Confidence: 96%.</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="small mt-12">Every decision record includes: trigger parameter + value + threshold, confidence score, physics snapshot, and alternatives that were considered but rejected.</p>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 8: LIVE SCENARIOS ══════════ -->
+<div class="slide" data-slide="8">
+  <div class="slide-inner">
+    <p class="label">Demonstration</p>
+    <h2>5 failure scenarios, tested live</h2>
+    <p class="sub" style="margin-top: 4px;">We inject each disturbance during the simulation and show the decision engine reacting in real-time with evidence.</p>
+
+    <div class="row" style="margin-top: 20px;">
+      <div>
+        <table>
+          <thead><tr><th>#</th><th>Scenario</th><th>Decision</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>12 m/s crosswind gust</td><td><span class="tag tag-a">REDUCE SPEED</span></td></tr>
+            <tr><td>2</td><td>Motor #3 bearing failure (35% drop)</td><td><span class="tag tag-a">SLOW</span> → <span class="tag tag-r">RTB</span></td></tr>
+            <tr><td>3</td><td>Battery overheating (58°C)</td><td><span class="tag tag-r">ABORT</span></td></tr>
+            <tr><td>4</td><td>Payload released mid-flight</td><td><span class="tag tag-g">CONTINUE</span> (re-calc)</td></tr>
+            <tr><td>5</td><td>Downdraft + thin air + low battery</td><td><span class="tag tag-a">ALTER ALT</span> → <span class="tag tag-r">RTB</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h3>Evidence trail (actual output)</h3>
+        <div class="code-sm" style="font-size: 11.5px;">
+{
+  "decision": "RETURN_TO_BASE",
+  "confidence": 0.92,
+  "triggers": [{
+    "parameter": "battery_soc",
+    "value": 16.2,
+    "threshold": 18.0,
+    "severity": "WARNING"
+  }],
+  "reason": "Energy reserve
+    insufficient for safe RTH.",
+  "physics_snapshot": {
+    "wind_speed": 7.3,
+    "hover_power": 28.4,
+    "rotor_effs": [.89,.88,.58,.90]
+  }
+}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 9: VOICE + AI ══════════ -->
+<div class="slide" data-slide="9">
+  <div class="slide-inner">
+    <p class="label">Innovation Beyond the Brief</p>
+    <h2>"Hey Garuda" — voice-controlled digital twin</h2>
+    <p class="sub" style="margin-top: 4px;">
+      We built a fully offline voice pipeline. No cloud, no internet — everything runs on-device.
+      Think Siri, but for a drone, and it never phones home.
+    </p>
+
+    <div class="row" style="margin-top: 24px;">
+      <div>
+        <h3>Voice pipeline</h3>
+        <div class="step">
+          <div class="step-n">1</div>
+          <div><p><strong>Wake word</strong> — openWakeWord listens for "Garuda" (3–8% CPU, always on)</p></div>
+        </div>
+        <div class="step">
+          <div class="step-n">2</div>
+          <div><p><strong>Speech-to-text</strong> — Whisper Tiny (INT8, 39 MB) transcribes the command</p></div>
+        </div>
+        <div class="step">
+          <div class="step-n">3</div>
+          <div><p><strong>Intent routing</strong> — 3 tiers: keyword match (&lt;5 ms), Needle 26M (&lt;20 ms), LFM-2.5 (200 ms)</p></div>
+        </div>
+        <div class="step">
+          <div class="step-n">4</div>
+          <div><p><strong>Voice feedback</strong> — Piper TTS responds: "Starting orbit mode"</p></div>
+        </div>
+        <p class="small mt-12">Most commands resolve in under 20 ms. Complex natural language goes to the LFM for full understanding.</p>
+      </div>
+
+      <div>
+        <h3>AI models on a Raspberry Pi 5</h3>
+        <table style="margin-top: 4px;">
+          <thead><tr><th>Model</th><th>Size</th><th>Speed</th></tr></thead>
+          <tbody>
+            <tr><td>LFM-2.5-230M (Liquid AI brain)</td><td>180 MB</td><td>42 tok/s</td></tr>
+            <tr><td>Needle 26M (fast router)</td><td>14 MB</td><td>1,200 tok/s</td></tr>
+            <tr><td>PicoDet-S (object detection)</td><td>4 MB</td><td>50 FPS</td></tr>
+            <tr><td>Whisper Tiny (speech-to-text)</td><td>39 MB</td><td>Real-time</td></tr>
+            <tr><td>Piper TTS (text-to-speech)</td><td>20 MB</td><td>Real-time</td></tr>
+          </tbody>
+        </table>
+        <p class="small mt-12">All running CPU-only on a Raspberry Pi 5 (8 GB). No GPU. The entire drone weighs 249g — below regulatory limits.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 10: DASHBOARD ══════════ -->
+<div class="slide" data-slide="10">
+  <div class="slide-inner">
+    <p class="label">Dashboard</p>
+    <h2>6 panels, all updating at 10 Hz</h2>
+    <p class="sub" style="margin-top: 4px;">Built with Python's Rich library. Reads telemetry JSON snapshots from the twin runner.</p>
+
+    <div class="row" style="margin-top: 20px;">
+      <div class="box box-blue">
+        <h3>Telemetry</h3>
+        <p>Altitude, airspeed, heading, GPS, distance to target/home</p>
+      </div>
+      <div class="box box-amber">
+        <h3>Environment</h3>
+        <p>ISA density, temperature, pressure, wind vector, turbulence bar</p>
+      </div>
+      <div class="box" style="background: #fdf4ff; border-color: #e9d5ff;">
+        <h3>Vehicle Health</h3>
+        <p>Battery SoC + temp, 4× motor efficiency bars, structural stress</p>
+      </div>
+    </div>
+    <div class="row" style="margin-top: 12px;">
+      <div class="box box-green">
+        <h3>Energy</h3>
+        <p>Power draw, hover/cruise power, endurance countdown, safe envelope</p>
+      </div>
+      <div class="box">
+        <h3>Uncertainty</h3>
+        <p>Every Kalman estimate with ±2σ confidence bounds</p>
+      </div>
+      <div class="box box-red">
+        <h3>Decision</h3>
+        <p>Current action, confidence %, trigger reason, alternatives considered</p>
+      </div>
+    </div>
+
+    <div class="quote mt-20">
+      During the demo we inject failure scenarios live and watch all 6 panels react simultaneously.
+      The decision panel shows exactly <i>why</i> the engine made its choice.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 11: JUDGING CRITERIA ══════════ -->
+<div class="slide" data-slide="11">
+  <div class="slide-inner">
+    <p class="label">Coverage</p>
+    <h2>How we address each judging criterion</h2>
+
+    <table class="mt-12">
+      <thead><tr><th>Criterion</th><th>Our implementation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Physical-state estimation accuracy</td>
+          <td>7 Kalman filters fusing ISA physics with sensor observations. Each state has 95% CI bounds.</td>
+        </tr>
+        <tr>
+          <td>Environmental modeling quality</td>
+          <td>ICAO atmosphere (density, temp, pressure) + Dryden wind turbulence (O-U process) + 4 injectable disturbances.</td>
+        </tr>
+        <tr>
+          <td>Energy/endurance prediction</td>
+          <td>Actuator disk hover/forward power with real hardware params. Mission feasibility = target + RTH + 30s reserve.</td>
+        </tr>
+        <tr>
+          <td>Safety decision effectiveness</td>
+          <td>6-tier engine with confidence scores. Evidence trail for every decision. Demonstrated across 5 failure scenarios.</td>
+        </tr>
+        <tr>
+          <td>Robustness under changing conditions</td>
+          <td>Crosswind, motor failure, thermal runaway, payload change, combined stress — all handled in real-time.</td>
+        </tr>
+        <tr>
+          <td>Physics/ML integration</td>
+          <td>Kalman filter = physics + sensor fusion. CfC Liquid Neural Network = learned controller. LFM = NL understanding.</td>
+        </tr>
+        <tr>
+          <td>Innovation in digital-twin design</td>
+          <td>Voice-controlled twin, Liquid AI architecture, evidence-based audit trails, real sub-250g hardware params.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 12: FUTURE ══════════ -->
+<div class="slide" data-slide="12">
+  <div class="slide-inner">
+    <p class="label">What's Next</p>
+    <h2>Future development</h2>
+    <p class="sub" style="margin-top: 4px;">The modular architecture means each piece can be upgraded independently.</p>
+
+    <div class="row" style="margin-top: 24px;">
+      <div class="box box-blue">
+        <h3>Voice biometrics</h3>
+        <p>Only the owner + 2 registered voices can command the drone. Speaker verification rejects unauthorized commands — a real security layer for deployment.</p>
+      </div>
+      <div class="box box-amber">
+        <h3>Satellite connectivity</h3>
+        <p>Iridium or Starlink backhaul for beyond-line-of-sight missions. Cloud digital twin mirroring for remote operator oversight.</p>
+      </div>
+      <div class="box box-green">
+        <h3>Multi-drone swarm</h3>
+        <p>PX4 multi-SITL is already configured with per-drone MAVSDK ports. Coordinated formation flying and distributed sensing.</p>
+      </div>
+    </div>
+    <div class="row">
+      <div class="box">
+        <h3>Edge SLAM</h3>
+        <p>Plug in OpenVINS or ORB-SLAM3 via the VisionPoseSource interface for true GPS-denied autonomous navigation. The interface is already defined.</p>
+      </div>
+      <div class="box">
+        <h3>RL decision refinement</h3>
+        <p>Use flight data to refine decision thresholds with reinforcement learning. The physics constraints stay — RL tunes the margins.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SLIDE 13: CLOSING ══════════ -->
+<div class="slide" data-slide="13">
+  <div class="slide-inner centered">
+    <p class="label">GARUDA</p>
+    <h1 style="font-size: clamp(30px, 4vw, 46px); max-width: 700px;">
+      It doesn't just simulate the drone.<br>It understands the physics.
+    </h1>
+    <p class="sub" style="text-align: center; max-width: 560px;">
+      Real equations. Real hardware parameters. Real-time decisions
+      with evidence you can audit.
+    </p>
+
+    <div class="stats" style="margin-top: 36px;">
+      <div><div class="stat-n">7</div><div class="stat-l">Physics models</div></div>
+      <div><div class="stat-n">6</div><div class="stat-l">Safety tiers</div></div>
+      <div><div class="stat-n">7</div><div class="stat-l">Kalman filters</div></div>
+      <div><div class="stat-n">5</div><div class="stat-l">Live scenarios</div></div>
+      <div><div class="stat-n" style="font-size: 28px;">&lt;20ms</div><div class="stat-l">Voice latency</div></div>
+    </div>
+
+    <p style="color: var(--text-2); font-size: 16px; margin-top: 40px;">
+      Team GarudaOne · HackFusion 2026 · IEEE RAS
+    </p>
+    <p class="small mt-12" style="font-style: italic;">"Hey Garuda, take off."</p>
+  </div>
+</div>
+
+</div>
+
+<!-- ── Nav ── -->
+<div class="nav">
+  <button onclick="go(cur-1)">← Prev</button>
+  <div class="dots" id="dots"></div>
+  <span id="ctr" class="mono" style="font-size: 12px;">1/14</span>
+  <button onclick="go(cur+1)">Next →</button>
+</div>
+
+<script>
+const ss=document.querySelectorAll('.slide'), dc=document.getElementById('dots'), ct=document.getElementById('ctr');
+let cur=0;
+ss.forEach((_,i)=>{const d=document.createElement('span');d.className=i===0?'on':'';d.onclick=()=>go(i);dc.appendChild(d)});
+function go(n){if(n<0||n>=ss.length||n===cur)return;ss[cur].classList.remove('active');cur=n;ss[cur].classList.add('active');const si=ss[cur].querySelector('.slide-inner');if(si)si.scrollTop=0;dc.querySelectorAll('span').forEach((d,i)=>d.className=i===cur?'on':'');ct.textContent=`${cur+1}/${ss.length}`}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();go(cur+1)}if(e.key==='ArrowLeft'){e.preventDefault();go(cur-1)}});
+let tx=0;document.addEventListener('touchstart',e=>tx=e.touches[0].clientX);document.addEventListener('touchend',e=>{const d=tx-e.changedTouches[0].clientX;if(Math.abs(d)>50)d>0?go(cur+1):go(cur-1)});
+</script>
+
+</body>
+</html>

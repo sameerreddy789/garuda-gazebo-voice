@@ -24,6 +24,7 @@
 | **16** | **VLA & World Action Models for Drone Cinematography** | EgoDex, VoxPoser, Diffusion Policy, Cosmos, DreamZero |
 | **17** | **Updated Models Reference (VLA/WAM)** | 16 additional models with edge deployability analysis |
 | **18** | **Recommended VLA Stack for GarudaOne** | 5-tier architecture: pre-train → fine-tune → personalize → generate → execute → improve |
+| **19** | **Live Voice NLU, Acoustic Feedback & Simulation Runtime** | Low-latency STT, Smallest.ai TTS, Windows SAPI offline fallback, and parametric flight control |
 
 ## Key Innovation: Adapting VLA/WAM Research to Aerial Cinematography
 
