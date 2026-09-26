@@ -32,3 +32,8 @@ dist/
 # Logs and media
 *.log
 media/
+
+# Gazebo SITL runtime caches
+*.ulg
+fs/
+scratch/
